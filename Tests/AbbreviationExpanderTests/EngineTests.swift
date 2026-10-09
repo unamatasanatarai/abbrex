@@ -5,12 +5,11 @@ final class EngineTests: XCTestCase {
     
     func testTemplateEngineDateAndClipboard() {
         let date = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 9))!
-        let template = "Date: {{date:YYYY/MM/DD}}, Clip: {{clipboard}}, Cursor: {{cursor}}end"
+        let template = "Date: {{date:YYYY/MM/DD}}, Clip: {{clipboard}}"
 
         let evaluated = TemplateEngine.evaluate(template: template, customDate: date, customClipboard: "MOCK_CLIP")
 
-        XCTAssertEqual(evaluated.text, "Date: 2026/10/09, Clip: MOCK_CLIP, Cursor: end")
-        XCTAssertEqual(evaluated.cursorOffset, 39)
+        XCTAssertEqual(evaluated.text, "Date: 2026/10/09, Clip: MOCK_CLIP")
     }
 
     func testStateMachineTransitions() {

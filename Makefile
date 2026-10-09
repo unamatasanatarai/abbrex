@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build run launch test revoke clean install dmg release release-dry-run
+.PHONY: help build run launch test revoke clean reset-cache install dmg release release-dry-run
 
 ## help: Display this help message
 help:
@@ -32,8 +32,18 @@ revoke:
 	@tccutil reset Accessibility com.citizen.AbbreviationExpander 2>/dev/null || true
 	@echo "✅ All permissions revoked."
 
+## reset-cache: Clear macOS LaunchServices and IconServices caches
+reset-cache:
+	@echo "==> Resetting macOS Icon and LaunchServices caches..."
+	@touch build/AbbrEx.app 2>/dev/null || true
+	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f -R build/AbbrEx.app 2>/dev/null || true
+	@qlmanage -r 2>/dev/null || true
+	@qlmanage -r cache 2>/dev/null || true
+	@killall Dock 2>/dev/null || true
+	@echo "✅ Cache reset complete."
+
 ## clean: Remove build artifacts
-clean: revoke
+clean:
 	@echo "==> Cleaning build artifacts..."
 	@rm -rf build /tmp/RunSwiftTests
 	@echo "✅ Clean complete."

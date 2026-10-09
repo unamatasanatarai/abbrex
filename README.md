@@ -30,7 +30,7 @@ Writing repetitive text—legal notices, bug reproduction steps, markdown skelet
 
 * **Frictionless Typing**: Type short prefixes like `:sig`, `:disc`, or `qa-bug` anywhere in macOS without context switching.
 * **Visual Confirmation**: A non-intrusive floating HUD shows matching expansions next to your cursor with keyboard navigation before committing.
-* **Context-Aware Templating**: Auto-populate current dates, timestamps, clipboard contents, and automatically reposition the insertion point where your input is needed.
+* **Context-Aware Templating**: Auto-populate current dates, timestamps, and clipboard contents.
 * **Native & Lightweight**: Built strictly in Swift, AppKit, and SwiftUI with zero external dependencies, running silently in your menu bar.
 
 ---
@@ -48,7 +48,6 @@ Templates evaluate on demand during expansion:
 * `{{date}}` / `{{date:YYYY-MM-DD}}`: Formatted calendar dates
 * `{{time}}`: Current system time
 * `{{clipboard}}`: Current pasteboard contents
-* `{{cursor}}`: Moves the system insertion caret directly into your designated template placeholder
 
 ### Developer-Friendly Navigation
 Navigate candidate lists with arrow keys or Vim/Emacs bindings (`Ctrl+j` / `Ctrl+k`, `Ctrl+n` / `Ctrl+p`). Commit expansions instantly using `Tab`, `Enter`, `Ctrl+l`, or a mouse click.
@@ -73,7 +72,7 @@ Designed with an adaptive template status bar icon that automatically switches b
         ↓
 3. Navigate & Select       Navigate with Arrow keys or Ctrl+j/k, then press Tab, Enter, or Ctrl+l.
         ↓
-4. In-Place Expansion      AbbrEx deletes the typed prefix, evaluates template variables, and places your cursor.
+4. In-Place Expansion      AbbrEx deletes the typed prefix and evaluates template variables.
 ```
 
 ---
@@ -88,7 +87,6 @@ AbbrEx supports embedded template variables directly within the expansion text e
 | `{{date:YYYY/MM/DD}}` | Custom date formatting | `2026/10/09` |
 | `{{time}}` | Current system time | `21:28` |
 | `{{clipboard}}` | Injects current pasteboard text | Output of your latest copy action |
-| `{{cursor}}` | Relocates active typing insertion point | Places caret inside `## [BUG] {{cursor}}` |
 
 ---
 
@@ -160,7 +158,7 @@ Sources/AbbreviationExpander/
 │   ├── Models.swift          # Expansion payload and engine state models
 │   ├── Trie.swift            # O(k) prefix tree lookup structure
 │   ├── StateMachine.swift    # Keystroke buffer lifecycle and state transitions
-│   ├── TemplateEngine.swift  # Variable evaluation (date, time, clipboard, cursor)
+│   ├── TemplateEngine.swift  # Variable evaluation (date, time, clipboard)
 │   ├── CaretTracker.swift    # Screen position detection via AXUIElement
 │   ├── TextReplacer.swift    # Automated backspace deletion and text insertion
 │   ├── LibraryStorage.swift  # Atomic JSON persistence (~/Library/Application Support/AbbrEx)

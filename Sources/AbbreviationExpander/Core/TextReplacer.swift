@@ -12,7 +12,7 @@ public final class TextReplacer {
     /// Replaces the typed abbreviation prefix with expanded template content.
     /// - Parameters:
     ///   - prefixLength: Number of characters typed in abbreviation to backspace/delete.
-    ///   - evaluated: Evaluated template text and optional cursor placement offset.
+    ///   - evaluated: Evaluated template text content.
     public static func replace(prefixLength: Int, evaluated: EvaluatedTemplate) {
         isReplacing = true
 
@@ -74,14 +74,6 @@ public final class TextReplacer {
             return false
         }
 
-        // 5. Position caret if {{cursor}} offset marker was specified
-        if let cursorOffset = evaluated.cursorOffset {
-            var newCaretPos = CFRange(location: deleteLocation + cursorOffset, length: 0)
-            if let newCaretVal = AXValueCreate(.cfRange, &newCaretPos) {
-                _ = AXUIElementSetAttributeValue(axElement, kAXSelectedTextRangeAttribute as CFString, newCaretVal)
-            }
-        }
-
         return true
     }
 
@@ -133,26 +125,6 @@ public final class TextReplacer {
             DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.3) {
                 pasteboard.clearContents()
                 pasteboard.setString(prev, forType: .string)
-            }
-        }
-
-        // 3. Handle {{cursor}} positioning via Left Arrow keys
-        if let cursorOffset = evaluated.cursorOffset {
-            let totalLen = expansionText.count
-            let stepsBack = totalLen - cursorOffset
-
-            if stepsBack > 0 {
-                DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.1) {
-                    for _ in 0..<stepsBack {
-                        if let leftDown = CGEvent(keyboardEventSource: src, virtualKey: 0x7B, keyDown: true) {
-                            leftDown.post(tap: .cgSessionEventTap)
-                        }
-                        if let leftUp = CGEvent(keyboardEventSource: src, virtualKey: 0x7B, keyDown: false) {
-                            leftUp.post(tap: .cgSessionEventTap)
-                        }
-                        usleep(1500)
-                    }
-                }
             }
         }
     }

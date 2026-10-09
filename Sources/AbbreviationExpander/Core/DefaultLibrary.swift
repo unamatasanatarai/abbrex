@@ -22,7 +22,6 @@ public struct DefaultLibrary {
                 expansion: """
                 Best regards,
 
-                {{cursor}}
                 Senior Content Strategist & Copywriter
                 Direct: +1 (555) 019-2834 | {{date}}
                 """
@@ -31,7 +30,7 @@ public struct DefaultLibrary {
                 id: "qa-bug",
                 prefix: "qa-bug",
                 expansion: """
-                ## [BUG] {{cursor}}
+                ## [BUG] 
 
                 ### 📌 Description
                 A brief description of the unexpected behavior encountered during testing.

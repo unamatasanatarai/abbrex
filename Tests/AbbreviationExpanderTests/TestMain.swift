@@ -61,14 +61,13 @@ struct TestMain {
         }
 
         // 2. Template Engine Tests
-        runTest("TemplateEngine - Date, Time, Clipboard & Cursor Token Parsing") {
+        runTest("TemplateEngine - Date, Time & Clipboard Token Parsing") {
             let date = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 9))!
-            let template = "Date: {{date:YYYY/MM/DD}}, Clip: {{clipboard}}, Cursor: {{cursor}}end"
+            let template = "Date: {{date:YYYY/MM/DD}}, Clip: {{clipboard}}"
 
             let evaluated = TemplateEngine.evaluate(template: template, customDate: date, customClipboard: "MOCK_CLIP")
 
-            assert(evaluated.text == "Date: 2026/10/09, Clip: MOCK_CLIP, Cursor: end", "Text output mismatch: \(evaluated.text)")
-            assert(evaluated.cursorOffset == 43, "Cursor offset mismatch")
+            assert(evaluated.text == "Date: 2026/10/09, Clip: MOCK_CLIP", "Text output mismatch: \(evaluated.text)")
         }
 
         // 3. State Machine & Keystroke Buffer Tests

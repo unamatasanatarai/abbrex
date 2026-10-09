@@ -1,484 +1,569 @@
 import SwiftUI
 import AppKit
+import Combine
 
 public struct PreferencesView: View {
     @ObservedObject var viewModel: AppViewModel
 
-    @State private var selectedTab = 0
-    @State private var singleLineText = ""
-    @State private var multiLineText = ""
     @State private var searchText = ""
-
     @State private var selectedItemId: String?
 
-    @FocusState private var focusedField: FocusField?
-    private enum FocusField: Hashable {
-        case prefix
-        case expansion
-    }
+    // Stashed deleted item for undo functionality
+    @State private var recentlyDeletedItem: (item: ExpansionPayload, index: Int)?
 
     public init(viewModel: AppViewModel) {
         self.viewModel = viewModel
     }
 
     public var body: some View {
-        ZStack(alignment: .top) {
-            TabView(selection: $selectedTab) {
-                // TAB 1: Unified Library & Inline Autosaving Editor
-                libraryAndEditorTab
-                    .tabItem {
-                        Label("Abbreviation Library", systemImage: "square.grid.2x2.fill")
-                    }
-                    .tag(0)
-
-                // TAB 2: Live Interactive Sandbox & State Inspector
-                playgroundTab
-                    .tabItem {
-                        Label("Live Sandbox", systemImage: "play.terminal.fill")
-                    }
-                    .tag(1)
+        VStack(spacing: 0) {
+            // Permission banner: in layout flow, smoothly pushing other elements down
+            if !viewModel.isAccessibilityGranted {
+                permissionBanner
+                Divider()
             }
 
-            // Accessibility permission toast notification if not granted
-            if !viewModel.isAccessibilityGranted {
-                accessibilityToast
-                    .transition(.move(edge: .top).combined(with: .opacity))
+            // Minimalist master-detail split view
+            HSplitView {
+                sidebarView
+                    .frame(minWidth: 200, idealWidth: 240, maxWidth: 320)
+
+                editorView
+                    .frame(minWidth: 360, maxWidth: .infinity)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: viewModel.isAccessibilityGranted)
-        .frame(width: 780, height: 540)
+        .frame(minWidth: 620, idealWidth: 700, minHeight: 400, idealHeight: 480)
         .onAppear {
             if selectedItemId == nil {
                 selectedItemId = viewModel.libraryItems.first?.id
             }
         }
+        .onDisappear {
+            // When the window is closed, undo gets dissolved
+            recentlyDeletedItem = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
+            recentlyDeletedItem = nil
+        }
     }
 
-    // MARK: - Accessibility Permission Toast
-    private var accessibilityToast: some View {
-        HStack(spacing: 12) {
+    // MARK: - Permission Banner (Pushes content down, never overlays)
+    private var permissionBanner: some View {
+        HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(.orange)
-                .font(.system(size: 16))
+                .font(.system(size: 13))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Accessibility Permission Required")
-                    .font(.system(size: 12, weight: .semibold))
-                Text("AbbrEx needs permission in System Settings to detect abbreviations and expand text.")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-            }
+            Text("Accessibility permission required to expand abbreviations")
+                .font(.system(size: 12))
+                .foregroundColor(.primary)
 
             Spacer()
 
-            Button("Grant Permission") {
+            Button("Enable") {
                 viewModel.openAccessibilitySettings()
             }
-            .buttonStyle(.borderedProminent)
             .controlSize(.small)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.orange.opacity(0.4), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.12))
+        .animation(.easeInOut(duration: 0.2), value: viewModel.isAccessibilityGranted)
     }
 
-    // MARK: - Tab 1: Library & Inline Autosaving Editor
-    private var libraryAndEditorTab: some View {
-        HStack(spacing: 0) {
-            // LEFT COLUMN: Search & Item List
-            VStack(spacing: 10) {
-                // Header & Search
-                HStack {
+    // MARK: - Sidebar (Search, Add, List, Undo / Restore Delete)
+    private var sidebarView: some View {
+        VStack(spacing: 0) {
+            // Header: Single-line search input + single '+' button
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.secondary)
-                    TextField("Search library...", text: $searchText)
-                        .textFieldStyle(.plain)
+                        .font(.system(size: 11))
+
+                    MacSingleLineTextField(
+                        placeholder: "Search...",
+                        text: $searchText,
+                        font: .systemFont(ofSize: 12)
+                    )
+                    .frame(height: 20)
+
                     if !searchText.isEmpty {
                         Button(action: { searchText = "" }) {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.secondary.opacity(0.7))
+                                .font(.system(size: 11))
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(8)
+                .padding(6)
                 .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(8)
-                .padding([.top, .horizontal], 12)
+                .cornerRadius(6)
 
-                // Add Inline Button
                 Button(action: createNewAbbreviation) {
-                    HStack {
-                        Image(systemName: "plus.circle.fill")
-                            .foregroundColor(.accentColor)
-                        Text("New Abbreviation")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.accentColor)
-                        Spacer()
-                    }
-                    .padding(8)
-                    .background(Color.accentColor.opacity(0.12))
-                    .cornerRadius(6)
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.primary)
                 }
                 .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-
-                Divider()
-
-                // List of items
-                List(selection: $selectedItemId) {
-                    ForEach(filteredItems, id: \.id) { item in
-                        ItemRow(item: item, isSelected: selectedItemId == item.id)
-                            .tag(item.id)
-                            .onTapGesture {
-                                selectedItemId = item.id
-                            }
-                    }
-                }
-                .listStyle(.sidebar)
+                .padding(6)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(6)
+                .help("New abbreviation")
             }
-            .frame(width: 260)
-            .background(Color(NSColor.windowBackgroundColor).opacity(0.5))
+            .padding(10)
 
             Divider()
 
-            // RIGHT COLUMN: Live Inline Autosaving Editor
-            VStack {
-                if let selectedId = selectedItemId, let item = viewModel.libraryItems.first(where: { $0.id == selectedId }) {
-                    inlineDetailEditor(item: item)
-                } else if let firstItem = viewModel.libraryItems.first {
-                    inlineDetailEditor(item: firstItem)
-                } else {
-                    emptySelectionView
+            // List of abbreviations
+            List(selection: $selectedItemId) {
+                ForEach(filteredItems, id: \.id) { item in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.prefix.isEmpty ? "New Abbreviation" : item.prefix)
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .foregroundColor(item.prefix.isEmpty ? .secondary : (selectedItemId == item.id ? .white : .accentColor))
+
+                        Text(item.expansion.isEmpty ? "Empty template" : item.expansion.replacingOccurrences(of: "\n", with: " "))
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(selectedItemId == item.id ? Color.white.opacity(0.8) : .secondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.vertical, 3)
+                    .tag(item.id)
                 }
+            }
+            .listStyle(.sidebar)
+
+            // Restore deleted snippet bar (persists across navigation and editing; dissolved on window close)
+            if let deleted = recentlyDeletedItem {
+                Divider()
+                HStack {
+                    Button(action: undoDelete) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.uturn.backward")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text(restoreButtonTitle(for: deleted.item))
+                                .font(.system(size: 12, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Restore deleted abbreviation")
+
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color(NSColor.controlBackgroundColor))
+                .transition(.opacity)
+            }
+        }
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.5))
+    }
+
+    // MARK: - Editor (Isolated detail view to prevent typing cursor jumps)
+    @ViewBuilder
+    private var editorView: some View {
+        if let selectedId = selectedItemId, let item = viewModel.libraryItems.first(where: { $0.id == selectedId }) {
+            ItemEditorView(
+                item: item,
+                isNew: item.prefix.isEmpty && item.expansion.isEmpty,
+                onUpdate: { updated in
+                    viewModel.updateItem(updated)
+                },
+                onDelete: {
+                    deleteItem(item)
+                }
+            )
+            .id(item.id)
+        } else {
+            VStack(spacing: 8) {
+                Image(systemName: "text.badge.plus")
+                    .font(.system(size: 36))
+                    .foregroundColor(.secondary.opacity(0.5))
+                Text("No Abbreviation Selected")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(NSColor.controlBackgroundColor))
         }
     }
 
-    // MARK: - Simplified Inline Detail Editor Panel (Autosaved continuously)
-    private func inlineDetailEditor(item: ExpansionPayload) -> some View {
-        let binding = Binding<ExpansionPayload>(
-            get: { item },
-            set: { updated in
-                viewModel.updateItem(updated)
-            }
-        )
-
-        return VStack(alignment: .leading, spacing: 14) {
-            // Header Bar with Trash icon only
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Abbreviation Prefix")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(item.prefix.isEmpty ? "New Abbreviation" : item.prefix)
-                        .font(.system(size: 20, weight: .bold, design: .monospaced))
-                        .foregroundColor(item.prefix.isEmpty ? .secondary : .accentColor)
-                }
-
-                Spacer()
-
-                // Delete button: trash icon only (no text label)
-                Button(action: {
-                    viewModel.deleteItem(item)
-                    selectedItemId = viewModel.libraryItems.first?.id
-                }) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.bordered)
-                .help("Delete abbreviation")
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 14) {
-                // 1. Prefix Field (auto-focused on "New Abbreviation")
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Prefix:")
-                        .font(.caption)
-                        .bold()
-                    TextField("Prefix (e.g. 'c-sig')", text: Binding(
-                        get: { binding.wrappedValue.prefix },
-                        set: { val in
-                            var curr = binding.wrappedValue
-                            curr = ExpansionPayload(id: curr.id, prefix: val, expansion: curr.expansion, tags: curr.tags)
-                            binding.wrappedValue = curr
-                        }
-                    ))
-                    .font(.system(.body, design: .monospaced))
-                    .textFieldStyle(.roundedBorder)
-                    .focused($focusedField, equals: .prefix)
-                }
-
-                // 2. Expansion Template Editor + Token Helper Chips
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("Expansion Template:")
-                            .font(.caption)
-                            .bold()
-                        Spacer()
-                    }
-
-                    // Token Chips Helper
-                    HStack(spacing: 6) {
-                        Text("Insert Token:")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-
-                        TokenChip(token: "{{date}}") {
-                            insertToken("{{date}}", into: binding)
-                        }
-                        TokenChip(token: "{{time}}") {
-                            insertToken("{{time}}", into: binding)
-                        }
-                        TokenChip(token: "{{clipboard}}") {
-                            insertToken("{{clipboard}}", into: binding)
-                        }
-                        TokenChip(token: "{{cursor}}") {
-                            insertToken("{{cursor}}", into: binding)
-                        }
-                    }
-
-                    TextEditor(text: Binding(
-                        get: { binding.wrappedValue.expansion },
-                        set: { val in
-                            var curr = binding.wrappedValue
-                            curr = ExpansionPayload(id: curr.id, prefix: curr.prefix, expansion: val, tags: curr.tags)
-                            binding.wrappedValue = curr
-                        }
-                    ))
-                    .font(.system(.body, design: .monospaced))
-                    .focused($focusedField, equals: .expansion)
-                    .frame(minHeight: 240)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                    )
-                }
-            }
-
-            Spacer()
-        }
-        .padding(16)
-    }
-
-    private var emptySelectionView: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 40))
-                .foregroundColor(.secondary)
-            Text("Select an abbreviation from the list to edit, or click 'New Abbreviation' to create one.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-
-            Button(action: createNewAbbreviation) {
-                Label("New Abbreviation", systemImage: "plus.circle.fill")
-            }
-            .buttonStyle(.borderedProminent)
-            .padding(.top, 4)
-        }
-    }
-
     private func createNewAbbreviation() {
         if let first = viewModel.libraryItems.first, first.prefix.isEmpty && first.expansion.isEmpty {
             selectedItemId = first.id
-            DispatchQueue.main.async {
-                focusedField = .prefix
-            }
             return
         }
 
         let newItem = viewModel.addItem(prefix: "", expansion: "")
         selectedItemId = newItem.id
-        DispatchQueue.main.async {
-            focusedField = .prefix
+    }
+
+    private func deleteItem(_ item: ExpansionPayload) {
+        if let idx = viewModel.libraryItems.firstIndex(where: { $0.id == item.id }) {
+            // Replace any previous undo with the newly deleted item
+            recentlyDeletedItem = (item: item, index: idx)
+            viewModel.deleteItem(item)
+            selectedItemId = viewModel.libraryItems.first?.id
         }
     }
 
-    private func insertToken(_ token: String, into binding: Binding<ExpansionPayload>) {
-        var curr = binding.wrappedValue
-        let updatedText = curr.expansion + token
-        curr = ExpansionPayload(id: curr.id, prefix: curr.prefix, expansion: updatedText, tags: curr.tags)
-        binding.wrappedValue = curr
+    private func undoDelete() {
+        guard let deleted = recentlyDeletedItem else { return }
+        let restoreIndex = min(deleted.index, viewModel.libraryItems.count)
+        viewModel.libraryItems.insert(deleted.item, at: restoreIndex)
+        viewModel.saveLibrary(immediate: true)
+        viewModel.reloadTrie()
+        selectedItemId = deleted.item.id
+        recentlyDeletedItem = nil
     }
 
-    // MARK: - Tab 2: Live Interactive Sandbox
-    private var playgroundTab: some View {
-        VStack(spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Interactive Expander Sandbox")
-                        .font(.title2)
-                        .bold()
-                    Text("Test real-time abbreviation expansion against your library.")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-            }
-            .padding([.top, .horizontal], 16)
+    private func restoreButtonTitle(for item: ExpansionPayload) -> String {
+        let rawTitle: String
+        let trimmedPrefix = item.prefix.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedExpansion = item.expansion.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ")
 
-            Divider()
-
-            HStack(spacing: 12) {
-                MetricCard(
-                    title: "Engine State",
-                    value: viewModel.currentState.description,
-                    color: stateColor(viewModel.currentState)
-                )
-
-                MetricCard(
-                    title: "Keystroke Buffer",
-                    value: viewModel.currentBuffer.isEmpty ? "(empty)" : viewModel.currentBuffer,
-                    color: .blue
-                )
-
-                MetricCard(
-                    title: "Active Matches",
-                    value: "\(viewModel.activeMatches.count)",
-                    color: .purple
-                )
-
-                MetricCard(
-                    title: "Trie Lookup",
-                    value: "< 0.2 ms",
-                    color: .green
-                )
-            }
-            .padding(.horizontal)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Type any prefix (e.g. 'c-disc', 'c-sig', 'qa-bug'), navigate with Ctrl+jk / Ctrl+np, then press Tab/Enter/Click:")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal)
-
-                VStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Single-line Input:")
-                            .font(.caption)
-                            .bold()
-                        TextField("Type prefix here...", text: $singleLineText)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Multi-line Text Area:")
-                            .font(.caption)
-                            .bold()
-                        TextEditor(text: $multiLineText)
-                            .font(.system(.body, design: .monospaced))
-                            .frame(height: 140)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                            )
-                    }
-                }
-                .padding(.horizontal)
-            }
-
-            Spacer()
+        if !trimmedPrefix.isEmpty {
+            rawTitle = trimmedPrefix
+        } else if !trimmedExpansion.isEmpty {
+            rawTitle = trimmedExpansion
+        } else {
+            rawTitle = "snippet"
         }
+
+        let titleSnippet: String
+        if rawTitle.count > 10 {
+            titleSnippet = String(rawTitle.prefix(10)) + "…"
+        } else {
+            titleSnippet = rawTitle
+        }
+        return "restore \(titleSnippet)"
     }
 
     private var filteredItems: [ExpansionPayload] {
         if searchText.isEmpty { return viewModel.libraryItems }
         return viewModel.libraryItems.filter {
-            $0.prefix.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-
-    private func stateColor(_ state: EngineState) -> Color {
-        switch state {
-        case .idle: return .secondary
-        case .buffering: return .blue
-        case .popupActive: return .purple
-        case .expanded: return .green
-        case .cancelled: return .orange
+            $0.prefix.localizedCaseInsensitiveContains(searchText) ||
+            $0.expansion.localizedCaseInsensitiveContains(searchText)
         }
     }
 }
 
-public struct TokenChip: View {
-    public let token: String
-    public let onClick: () -> Void
+// MARK: - Isolated Item Editor View
+struct ItemEditorView: View {
+    let item: ExpansionPayload
+    let isNew: Bool
+    let onUpdate: (ExpansionPayload) -> Void
+    let onDelete: () -> Void
 
-    public var body: some View {
-        Button(action: onClick) {
-            Text(token)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Color.accentColor.opacity(0.15))
-                .foregroundColor(.accentColor)
-                .cornerRadius(4)
-        }
-        .buttonStyle(.plain)
-    }
-}
+    @State private var prefix: String
+    @State private var expansion: String
 
-public struct MetricCard: View {
-    public let title: String
-    public let value: String
-    public let color: Color
-
-    public init(title: String, value: String, color: Color) {
-        self.title = title
-        self.value = value
-        self.color = color
+    init(
+        item: ExpansionPayload,
+        isNew: Bool,
+        onUpdate: @escaping (ExpansionPayload) -> Void,
+        onDelete: @escaping () -> Void
+    ) {
+        self.item = item
+        self.isNew = isNew
+        self.onUpdate = onUpdate
+        self.onDelete = onDelete
+        _prefix = State(initialValue: item.prefix)
+        _expansion = State(initialValue: item.expansion)
     }
 
-    public var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption2)
-                .foregroundColor(.secondary)
-            Text(value)
-                .font(.system(.subheadline, design: .monospaced))
-                .bold()
-                .foregroundColor(color)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header: Prefix input + single trash button
+            HStack(spacing: 10) {
+                Text("Prefix:")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+
+                MacSingleLineTextField(
+                    placeholder: "e.g. :sig",
+                    text: $prefix,
+                    font: .systemFont(ofSize: 14),
+                    isMonospaced: true,
+                    isAutoFocused: isNew
+                )
+                .frame(height: 22)
+
+                Spacer()
+
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(5)
+                .help("Delete abbreviation")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+
+            Divider()
+
+            // Expansion multiline textarea: native NSTextView ensuring no cursor jumps
+            MacTextEditor(
+                text: $expansion,
+                font: .monospacedSystemFont(ofSize: 13, weight: .regular)
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(NSColor.controlBackgroundColor))
+
+            Divider()
+
+            // Variables hint (non-interactive, minimal)
+            HStack {
+                Text("Variables: {{date}}  {{time}}  {{clipboard}}")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.secondary.opacity(0.7))
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .background(Color(NSColor.windowBackgroundColor).opacity(0.25))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
         .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(color.opacity(0.3), lineWidth: 1)
-        )
+        .onChange(of: prefix) { newPrefix in
+            onUpdate(ExpansionPayload(id: item.id, prefix: newPrefix, expansion: expansion, tags: item.tags))
+        }
+        .onChange(of: expansion) { newExpansion in
+            onUpdate(ExpansionPayload(id: item.id, prefix: prefix, expansion: newExpansion, tags: item.tags))
+        }
     }
 }
 
-public struct ItemRow: View {
-    public let item: ExpansionPayload
-    public let isSelected: Bool
+// MARK: - MacSingleLineTextField (Single-line input, no multiline wrapping, handles Cmd+A)
+struct MacSingleLineTextField: NSViewRepresentable {
+    var placeholder: String
+    @Binding var text: String
+    var font: NSFont
+    var isMonospaced: Bool
+    var isAutoFocused: Bool
+    var onCommit: (() -> Void)?
 
-    public var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(item.prefix.isEmpty ? "New Abbreviation" : item.prefix)
-                .font(.system(size: 13, weight: .bold, design: .monospaced))
-                .foregroundColor(isSelected ? .white : (item.prefix.isEmpty ? .secondary : .accentColor))
+    init(
+        placeholder: String,
+        text: Binding<String>,
+        font: NSFont = .systemFont(ofSize: 12),
+        isMonospaced: Bool = false,
+        isAutoFocused: Bool = false,
+        onCommit: (() -> Void)? = nil
+    ) {
+        self.placeholder = placeholder
+        self._text = text
+        self.font = font
+        self.isMonospaced = isMonospaced
+        self.isAutoFocused = isAutoFocused
+        self.onCommit = onCommit
+    }
 
-            Text(item.expansion.isEmpty ? "Empty template" : item.expansion.replacingOccurrences(of: "\n", with: " "))
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(isSelected ? Color.white.opacity(0.8) : .secondary)
-                .lineLimit(1)
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let textField = CustomNSTextField()
+        textField.placeholderString = placeholder
+        textField.stringValue = text
+        textField.font = isMonospaced ? .monospacedSystemFont(ofSize: font.pointSize, weight: .bold) : font
+        textField.isBordered = false
+        textField.drawsBackground = false
+        textField.isBezeled = false
+        textField.focusRingType = .none
+        textField.maximumNumberOfLines = 1
+        textField.cell?.usesSingleLineMode = true
+        textField.cell?.wraps = false
+        textField.cell?.isScrollable = true
+        textField.lineBreakMode = .byClipping
+        textField.delegate = context.coordinator
+        textField.shouldAutoFocusOnAppear = isAutoFocused
+
+        return textField
+    }
+
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        if nsView.stringValue != text {
+            nsView.stringValue = text
         }
-        .padding(.vertical, 4)
+    }
+
+    public class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: MacSingleLineTextField
+
+        init(_ parent: MacSingleLineTextField) {
+            self.parent = parent
+        }
+
+        public func controlTextDidChange(_ obj: Notification) {
+            guard let textField = obj.object as? NSTextField else { return }
+            var val = textField.stringValue
+            if val.contains("\n") || val.contains("\r") {
+                val = val.replacingOccurrences(of: "\n", with: "").replacingOccurrences(of: "\r", with: "")
+                textField.stringValue = val
+            }
+            if parent.text != val {
+                parent.text = val
+            }
+        }
+
+        public func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                parent.onCommit?()
+                return true // Swallow newline to keep strictly single-line
+            }
+            if commandSelector == #selector(NSText.selectAll(_:)) {
+                textView.selectAll(nil)
+                return true
+            }
+            return false
+        }
+    }
+}
+
+final class CustomNSTextField: NSTextField {
+    var shouldAutoFocusOnAppear: Bool = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if shouldAutoFocusOnAppear, let window = self.window {
+            DispatchQueue.main.async {
+                window.makeFirstResponder(self)
+            }
+        }
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.contains(.command) {
+            let key = event.charactersIgnoringModifiers?.lowercased()
+            if key == "a" {
+                if let editor = self.currentEditor() {
+                    editor.selectAll(nil)
+                } else {
+                    self.selectText(nil)
+                }
+                return true
+            }
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
+// MARK: - MacTextEditor (Regular textarea, handles Cmd+A, never jumps cursor to end on typing)
+struct MacTextEditor: NSViewRepresentable {
+    @Binding var text: String
+    var font: NSFont = .monospacedSystemFont(ofSize: 13, weight: .regular)
+    var isEditable: Bool = true
+
+    init(
+        text: Binding<String>,
+        font: NSFont = .monospacedSystemFont(ofSize: 13, weight: .regular),
+        isEditable: Bool = true
+    ) {
+        self._text = text
+        self.font = font
+        self.isEditable = isEditable
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+
+        let contentSize = scrollView.contentSize
+        let textStorage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        textStorage.addLayoutManager(layoutManager)
+
+        let textContainer = NSTextContainer(size: NSSize(width: contentSize.width, height: CGFloat.greatestFiniteMagnitude))
+        textContainer.widthTracksTextView = true
+        layoutManager.addTextContainer(textContainer)
+
+        let textView = MacNSTextView(frame: NSRect(origin: .zero, size: contentSize), textContainer: textContainer)
+        textView.minSize = NSSize(width: 0.0, height: contentSize.height)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.delegate = context.coordinator
+
+        textView.font = font
+        textView.textColor = .textColor
+        textView.backgroundColor = .clear
+        textView.drawsBackground = false
+        textView.isEditable = isEditable
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.string = text
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+
+        scrollView.documentView = textView
+        context.coordinator.textView = textView
+
+        return scrollView
+    }
+
+    func updateNSView(_ nsView: NSScrollView, context: Context) {
+        guard let textView = nsView.documentView as? NSTextView else { return }
+
+        // CRITICAL: Only update if the string has changed externally!
+        // When the user is typing, textView.string is ALREADY equal to text.
+        // Therefore, we do NOT assign textView.string, which prevents the cursor from jumping to the end!
+        if textView.string != text {
+            let prevRange = textView.selectedRange()
+            textView.string = text
+            if prevRange.location + prevRange.length <= text.utf16.count {
+                textView.setSelectedRange(prevRange)
+            }
+        }
+    }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: MacTextEditor
+        weak var textView: NSTextView?
+
+        init(_ parent: MacTextEditor) {
+            self.parent = parent
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            let currentString = textView.string
+            if parent.text != currentString {
+                parent.text = currentString
+            }
+        }
+    }
+}
+
+final class MacNSTextView: NSTextView {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.contains(.command) {
+            let key = event.charactersIgnoringModifiers?.lowercased()
+            if key == "a" {
+                self.selectAll(nil)
+                return true
+            }
+        }
+        return super.performKeyEquivalent(with: event)
     }
 }

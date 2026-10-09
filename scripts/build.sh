@@ -48,6 +48,8 @@ cat <<EOF >"$CONTENTS_DIR/Info.plist"
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleIconFile</key>
+    <string>AppIcon.icns</string>
+    <key>CFBundleIconName</key>
     <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
@@ -59,7 +61,12 @@ cat <<EOF >"$CONTENTS_DIR/Info.plist"
 </plist>
 EOF
 
-echo "3. Signing application binary..."
-codesign --force --deep --sign - "$APP_DIR"
+echo "3. Signing application binary with stable designated requirement..."
+codesign --force --deep --sign - --requirements "=designated => identifier \"$BUNDLE_ID\"" "$APP_DIR"
+
+echo "4. Refreshing macOS LaunchServices & Icon cache..."
+touch "$APP_DIR"
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f -R "$APP_DIR" 2>/dev/null || true
+qlmanage -r cache 2>/dev/null || true
 
 echo "✅ Build complete: $APP_DIR"

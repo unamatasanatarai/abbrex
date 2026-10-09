@@ -4,26 +4,24 @@ import AppKit
 /// Result of evaluating an expansion template.
 public struct EvaluatedTemplate {
     public let text: String
-    public let cursorOffset: Int?
 
-    public init(text: String, cursorOffset: Int?) {
+    public init(text: String) {
         self.text = text
-        self.cursorOffset = cursorOffset
     }
 }
 
-/// Dynamic variable parsing engine (evaluates {{date}}, {{time}}, {{clipboard}}, {{cursor}}).
+/// Dynamic variable parsing engine (evaluates {{date}}, {{time}}, {{clipboard}}).
 public final class TemplateEngine {
     
     /// Evaluates dynamic variables in a template string.
     /// - Parameters:
-    ///   - template: Raw expansion string containing tokens like {{date}}, {{clipboard}}
+    ///   - template: Raw expansion string containing tokens like {{date}}, {{time}}, {{clipboard}}
     ///   - customDate: Optional date for deterministic testing
     ///   - customClipboard: Optional clipboard string for deterministic testing
-    /// - Returns: EvaluatedTemplate containing final string and optional cursor offset
+    /// - Returns: EvaluatedTemplate containing final string
     public static func evaluate(template: String, customDate: Date? = nil, customClipboard: String? = nil) -> EvaluatedTemplate {
         guard !template.isEmpty else {
-            return EvaluatedTemplate(text: "", cursorOffset: nil)
+            return EvaluatedTemplate(text: "")
         }
 
         let now = customDate ?? Date()
@@ -63,15 +61,7 @@ public final class TemplateEngine {
             text = text.replacingOccurrences(of: "{{clipboard}}", with: clipText)
         }
 
-        // 4. Evaluate {{cursor}} placement marker
-        var cursorOffset: Int? = nil
-        if let cursorRange = text.range(of: "{{cursor}}") {
-            let distance = text.distance(from: text.startIndex, to: cursorRange.lowerBound)
-            cursorOffset = distance
-            text = text.replacingOccurrences(of: "{{cursor}}", with: "")
-        }
-
-        return EvaluatedTemplate(text: text, cursorOffset: cursorOffset)
+        return EvaluatedTemplate(text: text)
     }
 
     /// Formats a Date using standard tokens or DateFormatter
@@ -85,10 +75,11 @@ public final class TemplateEngine {
                 .replacingOccurrences(of: "YYYY", with: "yyyy")
                 .replacingOccurrences(of: "DD", with: "dd")
             formatter.dateFormat = swiftFormat
-        } else {
-            formatter.dateFormat = "yyyy-MM-dd"
+            return formatter.string(from: date)
         }
 
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
         return formatter.string(from: date)
     }
 }
