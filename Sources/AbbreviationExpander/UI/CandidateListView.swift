@@ -5,13 +5,11 @@ import AppKit
 public struct CandidateListView: View {
     public let matches: [ExpansionPayload]
     public let selectedIndex: Int
-    public let buffer: String
     public var onSelectCandidate: ((Int) -> Void)?
 
-    public init(matches: [ExpansionPayload], selectedIndex: Int, buffer: String, onSelectCandidate: ((Int) -> Void)? = nil) {
+    public init(matches: [ExpansionPayload], selectedIndex: Int, onSelectCandidate: ((Int) -> Void)? = nil) {
         self.matches = matches
         self.selectedIndex = selectedIndex
-        self.buffer = buffer
         self.onSelectCandidate = onSelectCandidate
     }
 
@@ -25,8 +23,7 @@ public struct CandidateListView: View {
                             ForEach(Array(matches.enumerated()), id: \.element.id) { index, match in
                                 CandidateRow(
                                     match: match,
-                                    isSelected: index == selectedIndex,
-                                    buffer: buffer
+                                    isSelected: index == selectedIndex
                                 ) {
                                     onSelectCandidate?(index)
                                 }
@@ -73,7 +70,6 @@ public struct CandidateListView: View {
 public struct CandidateRow: View {
     public let match: ExpansionPayload
     public let isSelected: Bool
-    public let buffer: String
     public let onClick: () -> Void
 
     @State private var isHovered: Bool = false

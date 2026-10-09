@@ -105,11 +105,6 @@ public final class StateMachine {
         return ExpansionResult(payload: selectedMatch, prefixLength: prefixLen, evaluated: evaluated)
     }
 
-    /// Intercepts Tab key when popup is active to return selected expansion.
-    public func processTabToExpand(customDate: Date? = nil, customClipboard: String? = nil) -> ExpansionResult? {
-        return processSelectionToExpand(index: nil, customDate: customDate, customClipboard: customClipboard)
-    }
-
     /// Cancels active buffering / popup state instantly.
     public func cancel() {
         reset(state: .cancelled)

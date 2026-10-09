@@ -12,7 +12,6 @@ public final class TrieNode {
 /// Bounded O(k) Trie (Prefix Tree) Data Structure for ultra-fast abbreviation prefix matching.
 public final class AbbreviationTrie {
     private let root = TrieNode()
-    public private(set) var size: Int = 0
 
     public init() {}
 
@@ -40,7 +39,6 @@ public final class AbbreviationTrie {
         } else {
             current.payloads.append(payload)
         }
-        size += 1
     }
 
     /// Searches candidate expansion matches starting with the specified prefix.
@@ -72,46 +70,10 @@ public final class AbbreviationTrie {
         }
     }
 
-    /// Removes an abbreviation entry by prefix and payload ID.
-    @discardableResult
-    public func remove(prefix: String, id: String) -> Bool {
-        guard !prefix.isEmpty else { return false }
-        let normalized = prefix.lowercased()
-        var current = root
-
-        for char in normalized {
-            guard let nextNode = current.children[char] else { return false }
-            current = nextNode
-        }
-
-        guard current.isEndOfWord else { return false }
-        let initialCount = current.payloads.count
-        current.payloads.removeAll(where: { $0.id == id })
-
-        if current.payloads.isEmpty {
-            current.isEndOfWord = false
-        }
-
-        if initialCount > current.payloads.count {
-            size -= 1
-            return true
-        }
-
-        return false
-    }
-
     /// Resets the Trie structure.
     public func clear() {
         root.children.removeAll()
         root.payloads.removeAll()
         root.isEndOfWord = false
-        size = 0
-    }
-
-    /// Returns all payloads stored in the Trie.
-    public func getAll() -> [ExpansionPayload] {
-        var results: [ExpansionPayload] = []
-        collectSubtree(root, results: &results)
-        return results
     }
 }

@@ -3,11 +3,6 @@ import SwiftUI
 import AppKit
 
 public final class AppViewModel: ObservableObject {
-    @Published public var currentState: EngineState = .idle
-    @Published public var currentBuffer: String = ""
-    @Published public var activeMatches: [ExpansionPayload] = []
-    @Published public var selectedIndex: Int = 0
-
     @Published public var isAccessibilityGranted: Bool = false
     @Published public var libraryItems: [ExpansionPayload] = []
 
@@ -57,11 +52,7 @@ public final class AppViewModel: ObservableObject {
     }
 
     public func reloadTrie() {
-        stateMachine.trie.clear()
-        for item in libraryItems {
-            stateMachine.trie.insert(prefix: item.prefix, payload: item)
-        }
-        stateMachine.reset()
+        stateMachine.loadItems(libraryItems)
     }
 
     public func startMonitoring() {
@@ -84,13 +75,8 @@ public final class AppViewModel: ObservableObject {
         stateMachine.onStateChanged = { [weak self] state, matches, selectedIdx in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                self.currentState = state
-                self.currentBuffer = self.stateMachine.buffer
-                self.activeMatches = matches
-                self.selectedIndex = selectedIdx
-
                 if state == .popupActive && !matches.isEmpty {
-                    self.scheduleOverlayShow(matches: matches, selectedIndex: selectedIdx, buffer: self.stateMachine.buffer)
+                    self.scheduleOverlayShow(matches: matches, selectedIndex: selectedIdx)
                 } else {
                     self.cancelAndDismissOverlay()
                 }
@@ -98,7 +84,7 @@ public final class AppViewModel: ObservableObject {
         }
     }
 
-    private func scheduleOverlayShow(matches: [ExpansionPayload], selectedIndex: Int, buffer: String) {
+    private func scheduleOverlayShow(matches: [ExpansionPayload], selectedIndex: Int) {
         showDebounceWorkItem?.cancel()
 
         // If overlay is ALREADY visible, update contents immediately
@@ -107,7 +93,6 @@ public final class AppViewModel: ObservableObject {
             overlayPanel.show(
                 matches: matches,
                 selectedIndex: selectedIndex,
-                buffer: buffer,
                 caretRect: caretRect
             )
             return
@@ -121,7 +106,6 @@ public final class AppViewModel: ObservableObject {
                 self.overlayPanel.show(
                     matches: matches,
                     selectedIndex: selectedIndex,
-                    buffer: buffer,
                     caretRect: caretRect
                 )
             }
@@ -167,12 +151,6 @@ public final class AppViewModel: ObservableObject {
 
     public func deleteItem(_ item: ExpansionPayload) {
         libraryItems.removeAll(where: { $0.id == item.id })
-        saveLibrary(immediate: true)
-        reloadTrie()
-    }
-
-    public func resetToDefaults() {
-        libraryItems = AppConfig.defaultSnippets
         saveLibrary(immediate: true)
         reloadTrie()
     }

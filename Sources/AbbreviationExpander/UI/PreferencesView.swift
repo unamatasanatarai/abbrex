@@ -395,14 +395,14 @@ struct MacSingleLineTextField: NSViewRepresentable {
         }
     }
 
-    public class Coordinator: NSObject, NSTextFieldDelegate {
+    class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: MacSingleLineTextField
 
         init(_ parent: MacSingleLineTextField) {
             self.parent = parent
         }
 
-        public func controlTextDidChange(_ obj: Notification) {
+        func controlTextDidChange(_ obj: Notification) {
             guard let textField = obj.object as? NSTextField else { return }
             var val = textField.stringValue
             if val.contains("\n") || val.contains("\r") {
@@ -414,7 +414,7 @@ struct MacSingleLineTextField: NSViewRepresentable {
             }
         }
 
-        public func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
                 parent.onCommit?()
                 return true // Swallow newline to keep strictly single-line

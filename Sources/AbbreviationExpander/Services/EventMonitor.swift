@@ -13,8 +13,6 @@ public final class EventMonitor {
 
     public var stateMachine: StateMachine
     public weak var overlayPanel: OverlayPanel?
-    public var onExpandTriggered: ((ExpansionResult) -> Void)?
-    public var onCaretPositionUpdate: ((CaretTracker.CaretRect) -> Void)?
 
     public init(stateMachine: StateMachine) {
         self.stateMachine = stateMachine
@@ -39,7 +37,7 @@ public final class EventMonitor {
         setupCGEventTap()
 
         // 3. Periodic timer to retry CGEventTap setup if permissions were granted after app start
-        retryTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        retryTimer = Timer.scheduledTimer(withTimeInterval: AppConfig.accessibilityRetryInterval, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             if self.eventTap == nil {
                 self.setupCGEventTap()
@@ -170,7 +168,6 @@ public final class EventMonitor {
                         return true
                     } else if chars == "l" { // Select expansion (works as Enter)
                         if let expansionResult = stateMachine.processSelectionToExpand() {
-                            onExpandTriggered?(expansionResult)
                             TextReplacer.replace(prefixLength: expansionResult.prefixLength, evaluated: expansionResult.evaluated)
                             return true // Consume Ctrl+l system-wide!
                         }
@@ -185,7 +182,6 @@ public final class EventMonitor {
         if keyCode == 0x30 || keyCode == 0x24 || keyCode == 0x4C {
             if stateMachine.state == .popupActive {
                 if let expansionResult = stateMachine.processSelectionToExpand() {
-                    onExpandTriggered?(expansionResult)
                     TextReplacer.replace(prefixLength: expansionResult.prefixLength, evaluated: expansionResult.evaluated)
                     return true // Consume Tab / Enter event system-wide!
                 }
@@ -220,10 +216,6 @@ public final class EventMonitor {
         // 6. Backspace key (0x33)
         if keyCode == 0x33 {
             stateMachine.processBackspace()
-            if stateMachine.state == .popupActive {
-                let rect = CaretTracker.getCaretScreenPosition()
-                onCaretPositionUpdate?(rect)
-            }
             return false
         }
 
@@ -247,11 +239,6 @@ public final class EventMonitor {
 
             if !isControlOrFunctionKey && (char.isLetter || char.isNumber || char.isPunctuation || char.isSymbol) {
                 stateMachine.processCharacter(char)
-
-                if stateMachine.state == .popupActive {
-                    let rect = CaretTracker.getCaretScreenPosition()
-                    onCaretPositionUpdate?(rect)
-                }
             }
         }
 

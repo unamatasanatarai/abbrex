@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
 
         // Set high-resolution application icon
-        if let icon = getAppIcon() {
+        if let icon = loadAppIcon() {
             NSApp.applicationIconImage = icon
         }
 
@@ -131,9 +131,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return fallback
     }
 
-    private func getAppIcon() -> NSImage? {
-        loadAppIcon()
-    }
 
     @objc private func openPreferencesWindow() {
         guard let vm = viewModel else { return }
@@ -236,7 +233,7 @@ final class PreferencesWindow: NSWindow {
 struct AboutView: View {
     var body: some View {
         VStack(spacing: 16) {
-            if let icon = getAppIcon() {
+            if let icon = loadAppIcon() {
                 Image(nsImage: icon)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -283,10 +280,6 @@ struct AboutView: View {
         }
         .padding(24)
         .frame(width: 320)
-    }
-
-    private func getAppIcon() -> NSImage? {
-        loadAppIcon()
     }
 }
 

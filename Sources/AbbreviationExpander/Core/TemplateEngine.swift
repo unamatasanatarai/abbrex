@@ -65,7 +65,7 @@ public final class TemplateEngine {
     }
 
     /// Formats a Date using standard tokens or DateFormatter
-    public static func formatDate(_ date: Date, format: String?) -> String {
+    private static func formatDate(_ date: Date, format: String?) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar.current
         formatter.locale = Locale.current

@@ -24,11 +24,10 @@ public final class OverlayPanel: NSPanel {
     }
 
     /// Shows overlay popup positioned relative to screen caret coordinates.
-    public func show(matches: [ExpansionPayload], selectedIndex: Int, buffer: String, caretRect: CaretTracker.CaretRect) {
+    public func show(matches: [ExpansionPayload], selectedIndex: Int, caretRect: CaretTracker.CaretRect) {
         let candidateView = CandidateListView(
             matches: matches,
             selectedIndex: selectedIndex,
-            buffer: buffer,
             onSelectCandidate: { [weak self] index in
                 self?.onCandidateSelected?(index)
             }

@@ -23,9 +23,6 @@ public struct AppConfig {
 
     // MARK: - Engine & Monitoring Settings
 
-    /// Maximum keystroke buffer string length.
-    public static var maxBufferLength: Int = 64
-
     /// Interval in seconds to check/retry Accessibility permission event tap.
     public static var accessibilityRetryInterval: Double = 2.0
 
