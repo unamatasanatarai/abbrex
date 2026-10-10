@@ -6,6 +6,9 @@ import ApplicationServices
 /// Text Replacement Engine using AXUIElement Accessibility APIs with CGEvent fallback.
 public final class TextReplacer {
 
+    private static let systemWide = AXUIElementCreateSystemWide()
+    private static let hidSource = CGEventSource(stateID: .hidSystemState)
+
     /// Guard flag: when true, event monitor ignores all keystrokes to prevent catching synthetic replacement events.
     public static var isReplacing: Bool = false
 
@@ -17,7 +20,7 @@ public final class TextReplacer {
         isReplacing = true
 
         defer {
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.2) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 isReplacing = false
             }
         }
@@ -33,7 +36,6 @@ public final class TextReplacer {
 
     /// Strategy A: Replaces text directly using macOS AXUIElement Accessibility API.
     private static func replaceViaAccessibility(prefixLength: Int, evaluated: EvaluatedTemplate) -> Bool {
-        let systemWide = AXUIElementCreateSystemWide()
         var focusedElementVal: CFTypeRef?
 
         guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElementVal) == .success,
@@ -80,7 +82,7 @@ public final class TextReplacer {
     /// Strategy B: Simulated Backspace + NSPasteboard Cmd+V fallback for web/electron text controls.
     private static func replaceViaKeystrokeSimulation(prefixLength: Int, evaluated: EvaluatedTemplate) {
         let expansionText = evaluated.text
-        let src = CGEventSource(stateID: .hidSystemState)
+        let src = hidSource
 
         // 1. Delete typed abbreviation prefix by posting Backspace CGEvent N times
         for _ in 0..<prefixLength {

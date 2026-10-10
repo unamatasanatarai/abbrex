@@ -5,11 +5,31 @@ import ApplicationServices
 /// Caret position tracker using macOS Accessibility APIs (AXUIElement).
 public final class CaretTracker {
 
+    private static let systemWide = AXUIElementCreateSystemWide()
+
     public struct CaretRect {
         public let origin: CGPoint
         public let height: CGFloat
         public let isFlippedAbove: Bool
         public let isFlippedLeft: Bool
+        public let screenFrame: CGRect
+        public let visibleFrame: CGRect
+
+        public init(
+            origin: CGPoint,
+            height: CGFloat,
+            isFlippedAbove: Bool,
+            isFlippedLeft: Bool,
+            screenFrame: CGRect = CGRect(x: 0, y: 0, width: 1920, height: 1080),
+            visibleFrame: CGRect = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        ) {
+            self.origin = origin
+            self.height = height
+            self.isFlippedAbove = isFlippedAbove
+            self.isFlippedLeft = isFlippedLeft
+            self.screenFrame = screenFrame
+            self.visibleFrame = visibleFrame
+        }
     }
 
     /// Fetches the screen coordinates for the current active text caret across macOS applications.
@@ -18,7 +38,6 @@ public final class CaretTracker {
     ///   - popupHeight: Height of the overlay popup to perform boundary detection.
     /// - Returns: Calculated CaretRect with target top-left point and flip flags.
     public static func getCaretScreenPosition(popupWidth: CGFloat = 340, popupHeight: CGFloat = 220) -> CaretRect {
-        let systemWide = AXUIElementCreateSystemWide()
         var focusedElement: CFTypeRef?
 
         let result = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement)
@@ -171,24 +190,20 @@ public final class CaretTracker {
             targetX = visibleFrame.minX + 10
         }
 
-        return CaretRect(origin: caretRect.origin, height: caretRect.height, isFlippedAbove: isFlippedAbove, isFlippedLeft: isFlippedLeft)
+        return CaretRect(
+            origin: caretRect.origin,
+            height: caretRect.height,
+            isFlippedAbove: isFlippedAbove,
+            isFlippedLeft: isFlippedLeft,
+            screenFrame: screenFrame,
+            visibleFrame: visibleFrame
+        )
     }
 
     /// Calculates exact AppKit Bottom-Left origin for dynamic popout dimensions, anchoring to the cursor corner.
     public static func calculateAnchoredOrigin(for caretRect: CaretRect, panelWidth: CGFloat, panelHeight: CGFloat) -> CGPoint {
-        let mainScreenHeight = NSScreen.screens.first?.frame.height ?? 1080
-        let targetScreen = NSScreen.screens.first(where: { screen in
-            let axTopLeftScreenFrame = CGRect(
-                x: screen.frame.origin.x,
-                y: mainScreenHeight - screen.frame.origin.y - screen.frame.height,
-                width: screen.frame.width,
-                height: screen.frame.height
-            )
-            return axTopLeftScreenFrame.contains(caretRect.origin)
-        }) ?? NSScreen.main
-
-        let screenFrame = targetScreen?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
-        let visibleFrame = targetScreen?.visibleFrame ?? screenFrame
+        let screenFrame = caretRect.screenFrame
+        let visibleFrame = caretRect.visibleFrame
 
         // Convert AX Top-Left y coordinate to AppKit Bottom-Left y coordinate
         let caretTopInAppKit = screenFrame.origin.y + (screenFrame.height - caretRect.origin.y)

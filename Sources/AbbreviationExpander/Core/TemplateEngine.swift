@@ -12,7 +12,28 @@ public struct EvaluatedTemplate {
 
 /// Dynamic variable parsing engine (evaluates {{date}}, {{time}}, {{clipboard}}).
 public final class TemplateEngine {
-    
+
+    private static let dateRegex: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"\{\{date(?::([^}]+))?\}\}"#,
+        options: []
+    )
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    private static let defaultDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
+    private static var customFormattersLock = os_unfair_lock()
+    private static var customFormattersCache: [String: DateFormatter] = [:]
+
     /// Evaluates dynamic variables in a template string.
     /// - Parameters:
     ///   - template: Raw expansion string containing tokens like {{date}}, {{time}}, {{clipboard}}
@@ -24,15 +45,19 @@ public final class TemplateEngine {
             return EvaluatedTemplate(text: "")
         }
 
+        // Fast-path: If template contains no variables, return text immediately with zero allocations
+        guard template.contains("{{") else {
+            return EvaluatedTemplate(text: template)
+        }
+
         let now = customDate ?? Date()
         var text = template
 
         // 1. Evaluate {{date}} or {{date:FORMAT}}
-        let datePattern = #"\{\{date(?::([^}]+))?\}\}"#
-        if let regex = try? NSRegularExpression(pattern: datePattern, options: []) {
+        if text.contains("{{date"), let regex = dateRegex {
             let nsString = text as NSString
             let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length)).reversed()
-            
+
             for match in matches {
                 var formatStr: String? = nil
                 if match.numberOfRanges > 1 && match.range(at: 1).location != NSNotFound {
@@ -45,10 +70,10 @@ public final class TemplateEngine {
         }
 
         // 2. Evaluate {{time}}
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        let timeStr = formatter.string(from: now)
-        text = text.replacingOccurrences(of: "{{time}}", with: timeStr)
+        if text.contains("{{time}}") {
+            let timeStr = timeFormatter.string(from: now)
+            text = text.replacingOccurrences(of: "{{time}}", with: timeStr)
+        }
 
         // 3. Evaluate {{clipboard}}
         if text.contains("{{clipboard}}") {
@@ -64,22 +89,32 @@ public final class TemplateEngine {
         return EvaluatedTemplate(text: text)
     }
 
-    /// Formats a Date using standard tokens or DateFormatter
+    /// Formats a Date using standard tokens or cached DateFormatter
     private static func formatDate(_ date: Date, format: String?) -> String {
+        guard let format = format, !format.isEmpty else {
+            return defaultDateFormatter.string(from: date)
+        }
+
+        os_unfair_lock_lock(&customFormattersLock)
+        let cached = customFormattersCache[format]
+        os_unfair_lock_unlock(&customFormattersLock)
+
+        if let cached = cached {
+            return cached.string(from: date)
+        }
+
         let formatter = DateFormatter()
         formatter.calendar = Calendar.current
         formatter.locale = Locale.current
+        let swiftFormat = format
+            .replacingOccurrences(of: "YYYY", with: "yyyy")
+            .replacingOccurrences(of: "DD", with: "dd")
+        formatter.dateFormat = swiftFormat
 
-        if let format = format, !format.isEmpty {
-            let swiftFormat = format
-                .replacingOccurrences(of: "YYYY", with: "yyyy")
-                .replacingOccurrences(of: "DD", with: "dd")
-            formatter.dateFormat = swiftFormat
-            return formatter.string(from: date)
-        }
+        os_unfair_lock_lock(&customFormattersLock)
+        customFormattersCache[format] = formatter
+        os_unfair_lock_unlock(&customFormattersLock)
 
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
         return formatter.string(from: date)
     }
 }

@@ -5,6 +5,7 @@ import SwiftUI
 public final class OverlayPanel: NSPanel {
 
     public var onCandidateSelected: ((Int) -> Void)?
+    private let candidateViewModel = CandidateViewModel()
 
     public init() {
         super.init(
@@ -21,18 +22,22 @@ public final class OverlayPanel: NSPanel {
         self.ignoresMouseEvents = false
         self.isReleasedWhenClosed = false
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-    }
 
-    /// Shows overlay popup positioned relative to screen caret coordinates.
-    public func show(matches: [ExpansionPayload], selectedIndex: Int, caretRect: CaretTracker.CaretRect) {
+        // Initialize SwiftUI hosting view ONCE for lifetime of the panel
         let candidateView = CandidateListView(
-            matches: matches,
-            selectedIndex: selectedIndex,
+            viewModel: candidateViewModel,
             onSelectCandidate: { [weak self] index in
                 self?.onCandidateSelected?(index)
             }
         )
         self.contentView = NSHostingView(rootView: candidateView)
+    }
+
+    /// Shows overlay popup positioned relative to screen caret coordinates.
+    public func show(matches: [ExpansionPayload], selectedIndex: Int, caretRect: CaretTracker.CaretRect) {
+        // Zero-allocation reactive update to existing view graph
+        candidateViewModel.matches = matches
+        candidateViewModel.selectedIndex = selectedIndex
 
         // Calculate dynamic height based on candidate match count
         let contentHeight = min(CGFloat(matches.count * 46 + 28), AppConfig.popupMaxHeight)

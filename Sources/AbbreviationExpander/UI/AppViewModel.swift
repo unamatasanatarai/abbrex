@@ -13,6 +13,7 @@ public final class AppViewModel: ObservableObject {
 
     private var showDebounceWorkItem: DispatchWorkItem?
     private var saveDebounceWorkItem: DispatchWorkItem?
+    private var notificationObservers: [NSObjectProtocol] = []
 
     public init(storage: LibraryStorage = .shared) {
         self.storage = storage
@@ -30,18 +31,25 @@ public final class AppViewModel: ObservableObject {
         setupTerminationObserver()
     }
 
+    deinit {
+        for observer in notificationObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
     private func setupTerminationObserver() {
-        NotificationCenter.default.addObserver(
+        let obs = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             self?.saveLibrary(immediate: true)
         }
+        notificationObservers.append(obs)
     }
 
     private func setupAppActiveObserver() {
-        NotificationCenter.default.addObserver(
+        let obs = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
             queue: .main
@@ -49,6 +57,7 @@ public final class AppViewModel: ObservableObject {
             self?.checkAccessibilityPermissions()
             self?.startMonitoring()
         }
+        notificationObservers.append(obs)
     }
 
     public func reloadTrie() {

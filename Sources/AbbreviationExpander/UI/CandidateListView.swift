@@ -1,29 +1,38 @@
 import SwiftUI
 import AppKit
 
-/// Floating accessible overlay list view displaying candidate abbreviation matches.
-public struct CandidateListView: View {
-    public let matches: [ExpansionPayload]
-    public let selectedIndex: Int
-    public var onSelectCandidate: ((Int) -> Void)?
+/// Observable View Model backing CandidateListView for zero-allocation updates.
+public final class CandidateViewModel: ObservableObject {
+    @Published public var matches: [ExpansionPayload] = []
+    @Published public var selectedIndex: Int = 0
 
-    public init(matches: [ExpansionPayload], selectedIndex: Int, onSelectCandidate: ((Int) -> Void)? = nil) {
+    public init(matches: [ExpansionPayload] = [], selectedIndex: Int = 0) {
         self.matches = matches
         self.selectedIndex = selectedIndex
+    }
+}
+
+/// Floating accessible overlay list view displaying candidate abbreviation matches.
+public struct CandidateListView: View {
+    @ObservedObject var viewModel: CandidateViewModel
+    public var onSelectCandidate: ((Int) -> Void)?
+
+    public init(viewModel: CandidateViewModel, onSelectCandidate: ((Int) -> Void)? = nil) {
+        self.viewModel = viewModel
         self.onSelectCandidate = onSelectCandidate
     }
 
     public var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
-            // Main Glassmorphism Popout Card containing candidates (Prefix monitoring removed!)
+            // Main Glassmorphism Popout Card containing candidates
             VStack(alignment: .leading, spacing: 0) {
                 ScrollViewReader { proxy in
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(spacing: 2) {
-                            ForEach(Array(matches.enumerated()), id: \.element.id) { index, match in
+                            ForEach(Array(viewModel.matches.enumerated()), id: \.element.id) { index, match in
                                 CandidateRow(
                                     match: match,
-                                    isSelected: index == selectedIndex
+                                    isSelected: index == viewModel.selectedIndex
                                 ) {
                                     onSelectCandidate?(index)
                                 }
@@ -32,16 +41,16 @@ public struct CandidateListView: View {
                         }
                         .padding(6)
                     }
-                    .onChange(of: selectedIndex) { newIndex in
-                        if newIndex >= 0 && newIndex < matches.count {
+                    .onChange(of: viewModel.selectedIndex) { newIndex in
+                        if newIndex >= 0 && newIndex < viewModel.matches.count {
                             withAnimation(.easeInOut(duration: 0.1)) {
-                                proxy.scrollTo(matches[newIndex].id, anchor: .center)
+                                proxy.scrollTo(viewModel.matches[newIndex].id, anchor: .center)
                             }
                         }
                     }
                 }
             }
-            .frame(width: AppConfig.popupWidth, height: min(CGFloat(matches.count * 46 + 14), AppConfig.popupMaxHeight))
+            .frame(width: AppConfig.popupWidth, height: min(CGFloat(viewModel.matches.count * 46 + 14), AppConfig.popupMaxHeight))
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(.ultraThinMaterial)

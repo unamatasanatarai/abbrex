@@ -51,6 +51,12 @@ public final class StateMachine {
         }
 
         buffer.append(char)
+
+        // Fast-path: If the buffer already yielded 0 matches, any extension will also have 0 matches in a prefix tree.
+        if state == .buffering && activeMatches.isEmpty {
+            return state
+        }
+
         updateMatchesAndState()
         return state
     }

@@ -131,8 +131,34 @@ public final class EventMonitor {
         }
 
         guard type == .keyDown else { return false }
-        guard let nsEvent = NSEvent(cgEvent: event) else { return false }
 
+        let flags = event.flags
+        let isCommandPressed = flags.contains(.maskCommand)
+        let isOptionPressed = flags.contains(.maskAlternate)
+
+        // Fast-path: Command or Option shortcuts reset state machine immediately with zero allocation
+        if isCommandPressed || isOptionPressed {
+            if stateMachine.state != .idle {
+                stateMachine.reset(state: .idle)
+            }
+            return false
+        }
+
+        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+
+        // Fast-path: Escape (0x35)
+        if keyCode == 0x35 {
+            stateMachine.cancel()
+            return false
+        }
+
+        // Fast-path: Backspace (0x33)
+        if keyCode == 0x33 {
+            stateMachine.processBackspace()
+            return false
+        }
+
+        guard let nsEvent = NSEvent(cgEvent: event) else { return false }
         return handleNSEvent(nsEvent)
     }
 

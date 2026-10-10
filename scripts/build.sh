@@ -20,9 +20,10 @@ if [ -d "Resources" ]; then
     cp -R Resources/* "$RESOURCES_DIR/"
 fi
 
-echo "1. Compiling Swift source files..."
+echo "1. Compiling Swift source files with Whole-Module-Optimization..."
 swiftc -sdk "$SDK_PATH" \
     -O \
+    -whole-module-optimization \
     Sources/AbbreviationExpander/Core/*.swift \
     Sources/AbbreviationExpander/UI/*.swift \
     Sources/AbbreviationExpander/Services/*.swift \

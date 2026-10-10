@@ -19,6 +19,13 @@ public final class LibraryStorage {
         }
     }
 
+    private static let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return e
+    }()
+    private static let decoder = JSONDecoder()
+
     /// Loads persisted abbreviations from disk.
     /// If the file does not exist yet, initializes with `AppConfig.defaultSnippets` and saves to disk.
     public func load() -> [ExpansionPayload] {
@@ -30,7 +37,7 @@ public final class LibraryStorage {
 
         do {
             let data = try Data(contentsOf: fileURL)
-            let items = try JSONDecoder().decode([ExpansionPayload].self, from: data)
+            let items = try Self.decoder.decode([ExpansionPayload].self, from: data)
             return items
         } catch {
             print("Warning: Failed to load library from \(fileURL.path): \(error). Falling back to defaults.")
@@ -44,9 +51,7 @@ public final class LibraryStorage {
         if !fileManager.fileExists(atPath: parentDir.path) {
             try fileManager.createDirectory(at: parentDir, withIntermediateDirectories: true, attributes: nil)
         }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(items)
+        let data = try Self.encoder.encode(items)
         try data.write(to: fileURL, options: .atomic)
     }
 

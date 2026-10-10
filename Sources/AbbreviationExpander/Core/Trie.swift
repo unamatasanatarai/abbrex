@@ -56,13 +56,17 @@ public final class AbbreviationTrie {
             current = nextNode
         }
 
+        if current.children.isEmpty {
+            return current.payloads
+        }
+
         var results: [ExpansionPayload] = []
         collectSubtree(current, results: &results)
         return results
     }
 
     private func collectSubtree(_ node: TrieNode, results: inout [ExpansionPayload]) {
-        if node.isEndOfWord && !node.payloads.isEmpty {
+        if !node.payloads.isEmpty {
             results.append(contentsOf: node.payloads)
         }
         for childNode in node.children.values {
