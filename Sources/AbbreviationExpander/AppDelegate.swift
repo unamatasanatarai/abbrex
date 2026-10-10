@@ -323,7 +323,7 @@ public struct AboutView: View {
                 Text("AbbrEx")
                     .font(.system(size: 20, weight: .bold))
 
-                Text("Version 1.0.0")
+                Text("Version \(AppConfig.version)")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
             }

@@ -6,50 +6,29 @@ public struct DefaultLibrary {
     public static var defaultItems: [ExpansionPayload] {
         [
             ExpansionPayload(
-                id: ":disc",
-                prefix: ":disc",
-                expansion: """
-                --------------------------------------------------
-                CONFIDENTIALITY NOTICE & LEGAL DISCLAIMER
-                The contents of this document and any attachments are intended solely for the addressee.
-                Created on {{date:YYYY-MM-DD}} at {{time}}. All rights reserved.
-                --------------------------------------------------
-                """
+                id: "gg",
+                prefix: "gg",
+                expansion: "good game"
             ),
             ExpansionPayload(
-                id: ":sig",
-                prefix: ":sig",
-                expansion: """
-                Best regards,
-
-                Senior Content Strategist & Copywriter
-                Direct: +1 (555) 019-2834 | {{date}}
-                """
+                id: ":shrug",
+                prefix: ":shrug",
+                expansion: "¯\\_(ツ)_/¯"
             ),
             ExpansionPayload(
-                id: "qa-bug",
-                prefix: "qa-bug",
-                expansion: """
-                ## [BUG] 
-
-                ### 📌 Description
-                A brief description of the unexpected behavior encountered during testing.
-
-                ### 🔄 Steps to Reproduce
-                1. Navigate to dashboard or target component.
-                2. Action performed: `{{clipboard}}`
-                3. Observe system behavior.
-
-                ### 🎯 Expected Result
-                System should handle input gracefully without error or visual artifact.
-
-                ### ❌ Actual Result
-                Unexpected behavior occurs.
-
-                ### 💻 Environment Matrix
-                - **OS**: macOS 12+
-                - **Timestamp**: {{date}} {{time}}
-                """
+                id: "ty",
+                prefix: "ty",
+                expansion: "Thank you!"
+            ),
+            ExpansionPayload(
+                id: "eus",
+                prefix: "eus",
+                expansion: "unamatasanatarai@gmail.com"
+            ),
+            ExpansionPayload(
+                id: ":buu",
+                prefix: ":buu",
+                expansion: #"rm -rf "$(brew --cache)" ; brew update ; brew upgrade --no-quarantine --cask --greedy ;brew upgrade --no-quarantine --greedy ; brew cleanup --prune=all -s"#
             )
         ]
     }

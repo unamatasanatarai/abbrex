@@ -19,7 +19,7 @@ public struct AppConfig {
 
     public static let appName: String = "AbbrEx"
     public static let bundleIdentifier: String = "com.citizen.AbbreviationExpander"
-    public static let version: String = "1.0.0"
+    public static let version: String = "1.0.1"
 
     // MARK: - Engine & Monitoring Settings
 

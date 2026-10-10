@@ -2,7 +2,8 @@
 set -e
 
 APP_NAME="AbbrEx"
-VERSION="1.0.0"
+VERSION=$(grep 'public static let version' Sources/AbbreviationExpander/Core/AppConfig.swift | sed -E 's/.*"([^"]+)".*/\1/')
+[ -z "$VERSION" ] && VERSION="1.0.1"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 DMG_NAME="AbbrEx-$VERSION.dmg"

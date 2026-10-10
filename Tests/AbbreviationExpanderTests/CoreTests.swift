@@ -31,14 +31,20 @@ public struct CoreTests {
 
             assert(AppConfig.appName == "AbbrEx", "appName mismatch")
             assert(AppConfig.bundleIdentifier == "com.citizen.AbbreviationExpander", "bundleIdentifier mismatch")
-            assert(AppConfig.version == "1.0.0", "version mismatch")
+            assert(AppConfig.version == "1.0.1", "version mismatch")
             assert(!AppConfig.defaultSnippets.isEmpty, "defaultSnippets should not be empty")
         }
 
         // MARK: - 2. DefaultLibrary Tests
         testRunner("DefaultLibrary - Built-in Items Content & Tags") {
             let items = DefaultLibrary.defaultItems
-            assert(items.count == 3, "Expected 3 default items, got \(items.count)")
+            assert(items.count == 5, "Expected 5 default items, got \(items.count)")
+            assert(items.map(\.prefix) == ["gg", ":shrug", "ty", "eus", ":buu"], "Default prefixes mismatch")
+            assert(items[0].expansion == "good game", "gg expansion mismatch")
+            assert(items[1].expansion == "¯\\_(ツ)_/¯", ":shrug expansion mismatch")
+            assert(items[2].expansion == "Thank you!", "ty expansion mismatch")
+            assert(items[3].expansion == "unamatasanatarai@gmail.com", "eus expansion mismatch")
+            assert(items[4].expansion == #"rm -rf "$(brew --cache)" ; brew update ; brew upgrade --no-quarantine --cask --greedy ;brew upgrade --no-quarantine --greedy ; brew cleanup --prune=all -s"#, ":buu expansion mismatch")
             for item in items {
                 assert(!item.prefix.isEmpty, "Item prefix cannot be empty")
                 assert(!item.expansion.isEmpty, "Item expansion cannot be empty")

@@ -121,7 +121,7 @@ Features an adaptive template status bar icon that conforms to both macOS Dark M
 ## How It Works
 
 ```text
-1. Type a prefix           Type an abbreviation prefix (e.g. ":sig" or "qa-bug") in any macOS app.
+1. Type a prefix           Type an abbreviation prefix (e.g. ":shrug" or "gg") in any macOS app.
         ↓
 2. Cursor Popout Appears   A floating HUD appears next to your typing caret showing available matches.
         ↓
