@@ -51,12 +51,17 @@ public final class OverlayPanel: NSPanel {
         )
 
         let newFrame = NSRect(origin: targetOrigin, size: NSSize(width: contentWidth, height: contentHeight))
-        self.setFrame(newFrame, display: true, animate: false)
-        self.orderFront(nil)
+        if self.frame != newFrame {
+            self.setFrame(newFrame, display: true, animate: false)
+        }
+        if !self.isVisible {
+            self.orderFront(nil)
+        }
     }
 
     /// Hides overlay popup.
     public func dismiss() {
+        guard self.isVisible else { return }
         self.orderOut(nil)
     }
 }

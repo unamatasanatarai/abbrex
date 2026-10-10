@@ -118,6 +118,9 @@ public final class StateMachine {
 
     /// Resets buffer and sets target state.
     public func reset(state targetState: EngineState = .idle) {
+        if state == targetState && buffer.isEmpty && activeMatches.isEmpty {
+            return
+        }
         buffer = ""
         activeMatches = []
         selectedIndex = 0

@@ -24,6 +24,8 @@ echo "1. Compiling Swift source files with Whole-Module-Optimization..."
 swiftc -sdk "$SDK_PATH" \
     -O \
     -whole-module-optimization \
+    -enforce-exclusivity=unchecked \
+    -Xlinker -dead_strip \
     Sources/AbbreviationExpander/Core/*.swift \
     Sources/AbbreviationExpander/UI/*.swift \
     Sources/AbbreviationExpander/Services/*.swift \

@@ -71,6 +71,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         exportItem.target = self
         fileMenu.addItem(exportItem)
 
+        fileMenu.addItem(NSMenuItem.separator())
+
+        let closeItem = NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        fileMenu.addItem(closeItem)
+
         fileMenuItem.submenu = fileMenu
         mainMenu.addItem(fileMenuItem)
 
@@ -286,6 +291,10 @@ final class PreferencesWindow: NSWindow {
                         return true
                     }
                 }
+            }
+            if key == "w" {
+                self.performClose(nil)
+                return true
             }
             if key == "q" {
                 if let appDelegate = NSApp.delegate as? AppDelegate {

@@ -566,6 +566,13 @@ struct MacSingleLineTextField: NSViewRepresentable {
                 textView.selectAll(nil)
                 return true
             }
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) ||
+               commandSelector == #selector(NSStandardKeyBindingResponding.complete(_:)) {
+                parent.text = ""
+                (control as? NSTextField)?.stringValue = ""
+                textView.string = ""
+                return true
+            }
             return false
         }
     }
@@ -584,6 +591,13 @@ final class CustomNSTextField: NSTextField {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.keyCode == 53 { // ESC key clears field
+            self.stringValue = ""
+            if let delegate = self.delegate as? MacSingleLineTextField.Coordinator {
+                delegate.parent.text = ""
+            }
+            return true
+        }
         if event.modifierFlags.contains(.command) {
             let key = event.charactersIgnoringModifiers?.lowercased()
             if key == "a" {

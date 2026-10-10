@@ -44,7 +44,7 @@ public final class AbbreviationTrie {
     /// Searches candidate expansion matches starting with the specified prefix.
     /// Time complexity: O(k + m) where k is prefix length and m is number of collected candidate matches.
     /// Returns empty array in < 1ms if prefix not found.
-    public func searchPrefix(_ prefix: String) -> [ExpansionPayload] {
+    public func searchPrefix(_ prefix: String, maxResults: Int = 16) -> [ExpansionPayload] {
         guard !prefix.isEmpty else { return [] }
         let normalized = prefix.lowercased()
         var current = root
@@ -61,16 +61,21 @@ public final class AbbreviationTrie {
         }
 
         var results: [ExpansionPayload] = []
-        collectSubtree(current, results: &results)
+        results.reserveCapacity(min(16, maxResults))
+        collectSubtree(current, results: &results, maxResults: maxResults)
         return results
     }
 
-    private func collectSubtree(_ node: TrieNode, results: inout [ExpansionPayload]) {
+    private func collectSubtree(_ node: TrieNode, results: inout [ExpansionPayload], maxResults: Int) {
         if !node.payloads.isEmpty {
-            results.append(contentsOf: node.payloads)
+            for payload in node.payloads {
+                results.append(payload)
+                if results.count >= maxResults { return }
+            }
         }
         for childNode in node.children.values {
-            collectSubtree(childNode, results: &results)
+            if results.count >= maxResults { return }
+            collectSubtree(childNode, results: &results, maxResults: maxResults)
         }
     }
 

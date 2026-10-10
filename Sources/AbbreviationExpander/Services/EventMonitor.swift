@@ -135,8 +135,9 @@ public final class EventMonitor {
         let flags = event.flags
         let isCommandPressed = flags.contains(.maskCommand)
         let isOptionPressed = flags.contains(.maskAlternate)
+        let isControlPressed = flags.contains(.maskControl)
 
-        // Fast-path: Command or Option shortcuts reset state machine immediately with zero allocation
+        // 1. Fast-path: Command or Option shortcuts reset state machine immediately with zero allocation
         if isCommandPressed || isOptionPressed {
             if stateMachine.state != .idle {
                 stateMachine.reset(state: .idle)
@@ -144,67 +145,21 @@ public final class EventMonitor {
             return false
         }
 
-        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        let keyCode = Int64(event.getIntegerValueField(.keyboardEventKeycode))
 
-        // Fast-path: Escape (0x35)
+        // 2. Fast-path: Escape (0x35)
         if keyCode == 0x35 {
             stateMachine.cancel()
             return false
         }
 
-        // Fast-path: Backspace (0x33)
+        // 3. Fast-path: Backspace (0x33)
         if keyCode == 0x33 {
             stateMachine.processBackspace()
             return false
         }
 
-        guard let nsEvent = NSEvent(cgEvent: event) else { return false }
-        return handleNSEvent(nsEvent)
-    }
-
-    /// Keydown event router and state machine interceptor.
-    /// Returns true if the event should be consumed.
-    public func handleNSEvent(_ event: NSEvent) -> Bool {
-        // DO NOT WATCH KEYSTROKES WHILE REPLACING TEXT!
-        if TextReplacer.isReplacing {
-            return false
-        }
-
-        let keyCode = event.keyCode
-        let flags = event.modifierFlags
-        let isControlPressed = flags.contains(.control)
-        let isCommandPressed = flags.contains(.command)
-        let isOptionPressed = flags.contains(.option)
-
-        // 1. Command or Option shortcuts reset state machine
-        if isCommandPressed || isOptionPressed {
-            stateMachine.reset(state: .idle)
-            return false
-        }
-
-        // 2. Control Shortcuts: Allow Ctrl+j / Ctrl+k / Ctrl+n / Ctrl+p navigation and Ctrl+l selection when popup is active
-        if isControlPressed {
-            if stateMachine.state == .popupActive {
-                if let chars = event.charactersIgnoringModifiers?.lowercased() {
-                    if chars == "j" || chars == "n" { // Down / Next candidate
-                        stateMachine.navigateSelection(direction: .down)
-                        return true
-                    } else if chars == "k" || chars == "p" { // Up / Previous candidate
-                        stateMachine.navigateSelection(direction: .up)
-                        return true
-                    } else if chars == "l" { // Select expansion (works as Enter)
-                        if let expansionResult = stateMachine.processSelectionToExpand() {
-                            TextReplacer.replace(prefixLength: expansionResult.prefixLength, evaluated: expansionResult.evaluated)
-                            return true // Consume Ctrl+l system-wide!
-                        }
-                    }
-                }
-            }
-            stateMachine.reset(state: .idle)
-            return false
-        }
-
-        // 2. Accept Expansion with Tab (0x30) or Return/Enter (0x24 / 0x4C)
+        // 4. Accept Expansion with Tab (0x30) or Return/Enter (0x24 / 0x4C)
         if keyCode == 0x30 || keyCode == 0x24 || keyCode == 0x4C {
             if stateMachine.state == .popupActive {
                 if let expansionResult = stateMachine.processSelectionToExpand() {
@@ -212,63 +167,111 @@ public final class EventMonitor {
                     return true // Consume Tab / Enter event system-wide!
                 }
             }
-            stateMachine.reset(state: .idle)
+            if stateMachine.state != .idle {
+                stateMachine.reset(state: .idle)
+            }
             return false
         }
 
-        // 4. Arrow Keys Navigation (Up: 0x7E, Down: 0x7D, Left: 0x7B, Right: 0x7C)
+        // 5. Arrow Keys Navigation (Up: 0x7E, Down: 0x7D, Left: 0x7B, Right: 0x7C)
         if keyCode == 0x7E || keyCode == 0x7D {
             if stateMachine.state == .popupActive {
                 let dir: NavigationDirection = (keyCode == 0x7E) ? .up : .down
                 stateMachine.navigateSelection(direction: dir)
                 return true
             } else {
-                stateMachine.reset(state: .idle)
+                if stateMachine.state != .idle {
+                    stateMachine.reset(state: .idle)
+                }
                 return false
             }
         }
 
         if keyCode == 0x7B || keyCode == 0x7C {
-            stateMachine.reset(state: .idle)
-            return false
-        }
-
-        // 5. Escape key (0x35)
-        if keyCode == 0x35 {
-            stateMachine.cancel()
-            return false
-        }
-
-        // 6. Backspace key (0x33)
-        if keyCode == 0x33 {
-            stateMachine.processBackspace()
-            return false
-        }
-
-        // 7. Ignore Function keys (F1-F12: 0x60..0x79) and Navigation keys
-        if (keyCode >= 0x60 && keyCode <= 0x79) {
-            stateMachine.reset(state: .idle)
-            return false
-        }
-
-        // 8. Printable Character Input
-        if let characters = event.characters, !characters.isEmpty {
-            let char = characters.first!
-
-            if char.isWhitespace || char.isNewline {
+            if stateMachine.state != .idle {
                 stateMachine.reset(state: .idle)
+            }
+            return false
+        }
+
+        // 6. Fast-path: Space (0x31)
+        if keyCode == 0x31 {
+            if stateMachine.state != .idle {
+                stateMachine.reset(state: .idle)
+            }
+            return false
+        }
+
+        // 7. Ignore Function keys (F1-F12: 0x60..0x79)
+        if (keyCode >= 0x60 && keyCode <= 0x79) {
+            if stateMachine.state != .idle {
+                stateMachine.reset(state: .idle)
+            }
+            return false
+        }
+
+        // 8. Control Shortcuts when popup active: Ctrl+j, Ctrl+k, Ctrl+n, Ctrl+p, Ctrl+l
+        if isControlPressed {
+            if stateMachine.state == .popupActive {
+                // Keycodes: j = 0x26, k = 0x28, n = 0x2D, p = 0x23, l = 0x25
+                if keyCode == 0x26 || keyCode == 0x2D { // j or n -> Down
+                    stateMachine.navigateSelection(direction: .down)
+                    return true
+                } else if keyCode == 0x28 || keyCode == 0x23 { // k or p -> Up
+                    stateMachine.navigateSelection(direction: .up)
+                    return true
+                } else if keyCode == 0x25 { // l -> Expand
+                    if let expansionResult = stateMachine.processSelectionToExpand() {
+                        TextReplacer.replace(prefixLength: expansionResult.prefixLength, evaluated: expansionResult.evaluated)
+                        return true
+                    }
+                }
+            }
+            if stateMachine.state != .idle {
+                stateMachine.reset(state: .idle)
+            }
+            return false
+        }
+
+        // 9. Zero-allocation Unicode character retrieval directly from CGEvent
+        var chars: (UniChar, UniChar, UniChar, UniChar) = (0, 0, 0, 0)
+        var actualLength = 0
+        withUnsafeMutablePointer(to: &chars) { ptr in
+            ptr.withMemoryRebound(to: UniChar.self, capacity: 4) { uniPtr in
+                event.keyboardGetUnicodeString(maxStringLength: 4, actualStringLength: &actualLength, unicodeString: uniPtr)
+            }
+        }
+
+        if actualLength > 0 {
+            let uVal = chars.0
+            if (uVal >= 0xF700 && uVal <= 0xF8FF) || uVal < 0x20 || uVal == 0x7F {
+                if stateMachine.state != .idle {
+                    stateMachine.reset(state: .idle)
+                }
                 return false
             }
 
-            let unicodeVal = char.utf16.first ?? 0
-            let isControlOrFunctionKey = (unicodeVal >= 0xF700 && unicodeVal <= 0xF8FF) || (unicodeVal < 0x20 || unicodeVal == 0x7F)
-
-            if !isControlOrFunctionKey && (char.isLetter || char.isNumber || char.isPunctuation || char.isSymbol) {
-                stateMachine.processCharacter(char)
+            if let scalar = UnicodeScalar(uVal) {
+                let char = Character(scalar)
+                if char.isWhitespace || char.isNewline {
+                    if stateMachine.state != .idle {
+                        stateMachine.reset(state: .idle)
+                    }
+                    return false
+                }
+                if char.isLetter || char.isNumber || char.isPunctuation || char.isSymbol {
+                    stateMachine.processCharacter(char)
+                }
             }
         }
 
         return false
+    }
+
+    /// Fallback NSEvent router for local event monitoring when accessibility tap is disabled.
+    public func handleNSEvent(_ event: NSEvent) -> Bool {
+        guard let cgEvent = event.cgEvent else { return false }
+        return handleCGEvent(cgEvent, type: .keyDown)
     }
 }
 
