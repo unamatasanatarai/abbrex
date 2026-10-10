@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 public final class AppViewModel: ObservableObject {
     @Published public var isAccessibilityGranted: Bool = false
@@ -185,5 +186,114 @@ public final class AppViewModel: ObservableObject {
         }
         self.saveDebounceWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
+    }
+
+    // MARK: - JSON Import & Export
+    public func exportLibraryWithSavePanel(targetWindow: NSWindow? = nil) {
+        let panel = NSSavePanel()
+        panel.title = "Export Snippets"
+        panel.nameFieldStringValue = "abbrex-library.json"
+        panel.allowedContentTypes = [.json]
+        panel.canCreateDirectories = true
+        panel.prompt = "Export"
+
+        let onComplete: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .OK, let url = panel.url, let self = self else { return }
+            do {
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                let nonEmpties = self.libraryItems.filter {
+                    !$0.prefix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                    !$0.expansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                let data = try encoder.encode(nonEmpties)
+                try data.write(to: url, options: .atomic)
+            } catch {
+                print("Failed to export snippets: \(error)")
+            }
+        }
+
+        if let window = targetWindow ?? NSApp.keyWindow {
+            panel.beginSheetModal(for: window, completionHandler: onComplete)
+        } else {
+            let response = panel.runModal()
+            onComplete(response)
+        }
+    }
+
+    public func importLibraryWithOpenPanel(targetWindow: NSWindow? = nil) {
+        let panel = NSOpenPanel()
+        panel.title = "Import Snippets"
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.prompt = "Import"
+
+        let onComplete: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .OK, let url = panel.url, let self = self else { return }
+            guard let data = try? Data(contentsOf: url) else { return }
+
+            let decoder = JSONDecoder()
+
+            // 1. Try native ExpansionPayload array
+            if let items = try? decoder.decode([ExpansionPayload].self, from: data) {
+                let valid = items.filter {
+                    !$0.prefix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                    !$0.expansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                if !valid.isEmpty {
+                    self.replaceLibrary(with: valid)
+                    return
+                }
+            }
+
+            // 2. Try generic array with optional fields (no id needed)
+            struct SnippetItem: Decodable {
+                let prefix: String?
+                let expansion: String?
+                let tags: [String]?
+            }
+            if let snippetItems = try? decoder.decode([SnippetItem].self, from: data) {
+                let payloads = snippetItems.compactMap { item -> ExpansionPayload? in
+                    guard let p = item.prefix, let e = item.expansion else { return nil }
+                    let cleanP = p.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let cleanE = e.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !cleanP.isEmpty || !cleanE.isEmpty else { return nil }
+                    return ExpansionPayload(prefix: p, expansion: e, tags: item.tags)
+                }
+                if !payloads.isEmpty {
+                    self.replaceLibrary(with: payloads)
+                    return
+                }
+            }
+
+            // 3. Try key-value dictionary { ":prefix": "expansion" }
+            if let dict = try? decoder.decode([String: String].self, from: data) {
+                let payloads = dict.compactMap { (prefix, expansion) -> ExpansionPayload? in
+                    let cleanP = prefix.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let cleanE = expansion.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !cleanP.isEmpty || !cleanE.isEmpty else { return nil }
+                    return ExpansionPayload(prefix: prefix, expansion: expansion)
+                }.sorted(by: { $0.prefix < $1.prefix })
+                if !payloads.isEmpty {
+                    self.replaceLibrary(with: payloads)
+                    return
+                }
+            }
+        }
+
+        if let window = targetWindow ?? NSApp.keyWindow {
+            panel.beginSheetModal(for: window, completionHandler: onComplete)
+        } else {
+            let response = panel.runModal()
+            onComplete(response)
+        }
+    }
+
+    public func replaceLibrary(with items: [ExpansionPayload]) {
+        self.libraryItems = items
+        saveLibrary(immediate: true)
+        reloadTrie()
     }
 }

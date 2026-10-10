@@ -139,7 +139,7 @@ struct TestMain {
 
             let storage3 = LibraryStorage(fileURL: testFileURL)
             let reloaded = storage3.load()
-            assert(reloaded.first(where: { $0.id == "custom-1" })?.expansion == "user@updated.com", "Updated item was not preserved")
+            assert(reloaded.first(where: { $0.prefix == "myemail" })?.expansion == "user@updated.com", "Updated item was not preserved")
 
             // Clean up
             try? storage3.removeStorageFile()

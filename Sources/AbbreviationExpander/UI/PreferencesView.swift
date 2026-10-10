@@ -10,7 +10,6 @@ public struct PreferencesView: View {
 
     // Stashed deleted item for undo functionality
     @State private var recentlyDeletedItem: (item: ExpansionPayload, index: Int)?
-    @State private var isPlusHovered = false
 
     public init(viewModel: AppViewModel) {
         self.viewModel = viewModel
@@ -40,11 +39,22 @@ public struct PreferencesView: View {
             }
         }
         .onDisappear {
-            // When the window is closed, undo gets dissolved
+            // When the window is closed, cancel empty snippets and dissolve undo
+            cleanupEmptySnippets()
             recentlyDeletedItem = nil
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
+            cleanupEmptySnippets()
             recentlyDeletedItem = nil
+        }
+        .onChange(of: selectedItemId) { newId in
+            // When clicking away to another snippet, automatically cancel the empty one
+            cleanupEmptySnippets(exceptId: newId)
+        }
+        .onChange(of: viewModel.libraryItems) { items in
+            if !items.contains(where: { $0.id == selectedItemId }) {
+                selectedItemId = items.first?.id
+            }
         }
     }
 
@@ -75,8 +85,8 @@ public struct PreferencesView: View {
     // MARK: - Sidebar (Search, Add, List, Undo / Restore Delete)
     private var sidebarView: some View {
         VStack(spacing: 0) {
-            // Header: Single-line search input + single '+' button
-            HStack(spacing: 8) {
+            // Header: Single-line search input + '+' button + options menu
+            HStack(spacing: 6) {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.secondary)
@@ -102,43 +112,27 @@ public struct PreferencesView: View {
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(6)
 
-                Button(action: createNewAbbreviation) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(isPlusHovered ? .primary : .secondary)
-                        .frame(width: 32, height: 32)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(isPlusHovered ? Color.primary.opacity(0.1) : Color(NSColor.controlBackgroundColor))
-                        )
-                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.12)) {
-                        isPlusHovered = hovering
-                    }
-                }
-                .help("New abbreviation")
+                PlusIconButton(action: createNewAbbreviation)
+
+                ActionMenuButton(
+                    onImport: { viewModel.importLibraryWithOpenPanel() },
+                    onExport: { viewModel.exportLibraryWithSavePanel() }
+                )
             }
             .padding(10)
 
             Divider()
 
-            // List of abbreviations
+            // List of abbreviations (inlined prefix & expansion + hover delete)
             List(selection: $selectedItemId) {
                 ForEach(filteredItems, id: \.id) { item in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(item.prefix.isEmpty ? "New Abbreviation" : item.prefix)
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                            .foregroundColor(item.prefix.isEmpty ? .secondary : (selectedItemId == item.id ? .white : .accentColor))
-
-                        Text(item.expansion.isEmpty ? "Empty template" : item.expansion.replacingOccurrences(of: "\n", with: " "))
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(selectedItemId == item.id ? Color.white.opacity(0.8) : .secondary)
-                            .lineLimit(1)
-                    }
-                    .padding(.vertical, 3)
+                    SidebarItemRow(
+                        item: item,
+                        isSelected: selectedItemId == item.id,
+                        onDelete: {
+                            deleteItem(item)
+                        }
+                    )
                     .tag(item.id)
                 }
             }
@@ -181,9 +175,6 @@ public struct PreferencesView: View {
                 isNew: item.prefix.isEmpty && item.expansion.isEmpty,
                 onUpdate: { updated in
                     viewModel.updateItem(updated)
-                },
-                onDelete: {
-                    deleteItem(item)
                 }
             )
             .id(item.id)
@@ -201,7 +192,23 @@ public struct PreferencesView: View {
         }
     }
 
+    private func cleanupEmptySnippets(exceptId: String? = nil) {
+        let emptyItems = viewModel.libraryItems.filter { item in
+            item.id != exceptId &&
+            item.prefix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            item.expansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        guard !emptyItems.isEmpty else { return }
+
+        for empty in emptyItems {
+            viewModel.deleteItem(empty)
+        }
+    }
+
     private func createNewAbbreviation() {
+        cleanupEmptySnippets()
+
         if let first = viewModel.libraryItems.first, first.prefix.isEmpty && first.expansion.isEmpty {
             selectedItemId = first.id
             return
@@ -212,11 +219,26 @@ public struct PreferencesView: View {
     }
 
     private func deleteItem(_ item: ExpansionPayload) {
+        let isBlank = item.prefix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                      item.expansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
         if let idx = viewModel.libraryItems.firstIndex(where: { $0.id == item.id }) {
-            // Replace any previous undo with the newly deleted item
-            recentlyDeletedItem = (item: item, index: idx)
+            if isBlank {
+                // Cancelled adding/editing an empty snippet: do not show restore
+                recentlyDeletedItem = nil
+            } else {
+                recentlyDeletedItem = (item: item, index: idx)
+            }
             viewModel.deleteItem(item)
-            selectedItemId = viewModel.libraryItems.first?.id
+
+            if selectedItemId == item.id {
+                if !viewModel.libraryItems.isEmpty {
+                    let nextIndex = min(idx, viewModel.libraryItems.count - 1)
+                    selectedItemId = viewModel.libraryItems[nextIndex].id
+                } else {
+                    selectedItemId = nil
+                }
+            }
         }
     }
 
@@ -266,29 +288,25 @@ struct ItemEditorView: View {
     let item: ExpansionPayload
     let isNew: Bool
     let onUpdate: (ExpansionPayload) -> Void
-    let onDelete: () -> Void
 
     @State private var prefix: String
     @State private var expansion: String
-    @State private var isTrashHovered = false
 
     init(
         item: ExpansionPayload,
         isNew: Bool,
-        onUpdate: @escaping (ExpansionPayload) -> Void,
-        onDelete: @escaping () -> Void
+        onUpdate: @escaping (ExpansionPayload) -> Void
     ) {
         self.item = item
         self.isNew = isNew
         self.onUpdate = onUpdate
-        self.onDelete = onDelete
         _prefix = State(initialValue: item.prefix)
         _expansion = State(initialValue: item.expansion)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header: Prefix input + single trash button
+            // Header: Prefix input
             HStack(spacing: 10) {
                 Text("Prefix:")
                     .font(.system(size: 12, weight: .semibold))
@@ -304,25 +322,6 @@ struct ItemEditorView: View {
                 .frame(height: 22)
 
                 Spacer()
-
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 12))
-                        .foregroundColor(isTrashHovered ? .red.opacity(0.85) : .secondary)
-                        .frame(width: 28, height: 28)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(isTrashHovered ? Color.red.opacity(0.12) : Color.clear)
-                        )
-                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.12)) {
-                        isTrashHovered = hovering
-                    }
-                }
-                .help("Delete abbreviation")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -357,6 +356,130 @@ struct ItemEditorView: View {
         .onChange(of: expansion) { newExpansion in
             onUpdate(ExpansionPayload(id: item.id, prefix: prefix, expansion: newExpansion, tags: item.tags))
         }
+    }
+}
+
+// MARK: - Inlined Sidebar Item Row with Hover Delete
+struct SidebarItemRow: View {
+    let item: ExpansionPayload
+    let isSelected: Bool
+    let onDelete: () -> Void
+
+    @State private var isRowHovered = false
+    @State private var isTrashHovered = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(item.prefix.isEmpty ? "New Abbreviation" : item.prefix)
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundColor(item.prefix.isEmpty ? .secondary : (isSelected ? .white : .accentColor))
+                .lineLimit(1)
+                .layoutPriority(1)
+
+            Text(item.expansion.isEmpty ? "" : item.expansion.replacingOccurrences(of: "\n", with: " "))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(isSelected ? Color.white.opacity(0.75) : .secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer(minLength: 4)
+
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.system(size: 11))
+                    .foregroundColor(isTrashHovered ? .red : (isSelected ? .white.opacity(0.9) : .secondary))
+                    .frame(width: 22, height: 22)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(isTrashHovered ? Color.red.opacity(0.16) : Color.clear)
+                    )
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .opacity(isRowHovered ? 1.0 : 0.0)
+            .animation(.easeInOut(duration: 0.1), value: isRowHovered)
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    isTrashHovered = hovering
+                }
+            }
+            .help("Delete abbreviation")
+        }
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isRowHovered = hovering
+            }
+        }
+    }
+}
+
+// MARK: - Isolated Plus Button (Eliminates Hover Re-render Blinking)
+struct PlusIconButton: View {
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(isHovered ? .primary : .secondary)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isHovered ? Color.primary.opacity(0.1) : Color(NSColor.controlBackgroundColor))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if isHovered != hovering {
+                withAnimation(.easeInOut(duration: 0.12)) {
+                    isHovered = hovering
+                }
+            }
+        }
+        .help("New abbreviation")
+    }
+}
+
+// MARK: - Action Menu Button (Import / Export JSON)
+struct ActionMenuButton: View {
+    let onImport: () -> Void
+    let onExport: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Menu {
+            Button(action: onImport) {
+                Label("Import from JSON...", systemImage: "square.and.arrow.down")
+            }
+            Button(action: onExport) {
+                Label("Export to JSON...", systemImage: "square.and.arrow.up")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(isHovered ? .primary : .secondary)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isHovered ? Color.primary.opacity(0.1) : Color(NSColor.controlBackgroundColor))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .onHover { hovering in
+            if isHovered != hovering {
+                withAnimation(.easeInOut(duration: 0.12)) {
+                    isHovered = hovering
+                }
+            }
+        }
+        .help("Options")
     }
 }
 

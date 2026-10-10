@@ -2,8 +2,10 @@ import AppKit
 import SwiftUI
 
 @main
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
+    private var statusMenu: NSMenu?
+    private var isShowingMenu = false
     private var preferencesWindow: NSWindow?
     private var aboutWindow: NSWindow?
     private var viewModel: AppViewModel?
@@ -57,7 +59,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
 
-        // 2. Edit Menu (Crucial for Cmd+A, Cmd+C, Cmd+V, Cmd+X, Cmd+Z across all inputs)
+        // 2. File Menu (Import and Export)
+        let fileMenuItem = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
+        let fileMenu = NSMenu(title: "File")
+
+        let importItem = NSMenuItem(title: "Import Snippets...", action: #selector(importSnippetsAction), keyEquivalent: "i")
+        importItem.target = self
+        fileMenu.addItem(importItem)
+
+        let exportItem = NSMenuItem(title: "Export Snippets...", action: #selector(exportSnippetsAction), keyEquivalent: "e")
+        exportItem.target = self
+        fileMenu.addItem(exportItem)
+
+        fileMenuItem.submenu = fileMenu
+        mainMenu.addItem(fileMenuItem)
+
+        // 3. Edit Menu (Crucial for Cmd+A, Cmd+C, Cmd+V, Cmd+X, Cmd+Z across all inputs)
         let editMenuItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         let editMenu = NSMenu(title: "Edit")
         editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
@@ -76,16 +93,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupStatusMenu() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem?.button {
-            let icon = getStatusBarIcon()
-            icon.isTemplate = true
-            button.image = icon
-            button.image?.isTemplate = true
-            button.imagePosition = .imageOnly
-            button.toolTip = "AbbrEx"
-        }
+        guard let button = statusItem?.button else { return }
+
+        let icon = getStatusBarIcon()
+        icon.isTemplate = true
+        button.image = icon
+        button.image?.isTemplate = true
+        button.imagePosition = .imageOnly
+        button.toolTip = "AbbrEx"
+
+        button.target = self
+        button.action = #selector(handleStatusBarClick(_:))
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
         let menu = NSMenu()
+        menu.delegate = self
 
         let openItem = NSMenuItem(title: "Open AbbrEx", action: #selector(openPreferencesWindow), keyEquivalent: "")
         openItem.target = self
@@ -93,11 +115,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        let importItem = NSMenuItem(title: "Import Snippets...", action: #selector(importSnippetsAction), keyEquivalent: "")
+        importItem.target = self
+        menu.addItem(importItem)
+
+        let exportItem = NSMenuItem(title: "Export Snippets...", action: #selector(exportSnippetsAction), keyEquivalent: "")
+        exportItem.target = self
+        menu.addItem(exportItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         let quitItem = NSMenuItem(title: "Quit", action: #selector(handleQuitMenuAction(_:)), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
-        statusItem?.menu = menu
+        self.statusMenu = menu
+        // statusItem?.menu is intentionally left nil to allow distinguishing left vs right click
+    }
+
+    @objc private func handleStatusBarClick(_ sender: NSStatusBarButton) {
+        guard !isShowingMenu else { return }
+
+        let event = NSApp.currentEvent
+        let isRightClick = event?.type == .rightMouseUp ||
+            (event?.modifierFlags.contains(.control) == true && (event?.type == .leftMouseUp || event?.type == .leftMouseDown))
+
+        if isRightClick {
+            isShowingMenu = true
+            statusItem?.menu = statusMenu
+            statusItem?.button?.performClick(nil)
+        } else {
+            openPreferencesWindow()
+        }
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        if menu == statusMenu {
+            statusItem?.menu = nil
+            isShowingMenu = false
+        }
+    }
+
+    @objc func importSnippetsAction() {
+        openPreferencesWindow()
+        viewModel?.importLibraryWithOpenPanel(targetWindow: preferencesWindow)
+    }
+
+    @objc func exportSnippetsAction() {
+        openPreferencesWindow()
+        viewModel?.exportLibraryWithSavePanel(targetWindow: preferencesWindow)
     }
 
     private func getStatusBarIcon() -> NSImage {
@@ -148,6 +214,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.preferencesWindow = window
         }
 
+        if preferencesWindow?.isMiniaturized == true {
+            preferencesWindow?.deminiaturize(nil)
+        }
         preferencesWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
