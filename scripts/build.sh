@@ -64,6 +64,8 @@ cat <<EOF >"$CONTENTS_DIR/Info.plist"
     <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
+    <key>LSUIElement</key>
+    <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
