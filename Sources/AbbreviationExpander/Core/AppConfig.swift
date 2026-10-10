@@ -10,10 +10,10 @@ public struct AppConfig {
     public static var popupDelayMs: Double = 200.0
 
     /// Default width of the floating overlay candidate panel.
-    public static var popupWidth: CGFloat = 340.0
+    public static var popupWidth: CGFloat = 240.0
 
     /// Maximum height of the floating overlay candidate panel.
-    public static var popupMaxHeight: CGFloat = 220.0
+    public static var popupMaxHeight: CGFloat = 150.0
 
     // MARK: - Application Metadata
 

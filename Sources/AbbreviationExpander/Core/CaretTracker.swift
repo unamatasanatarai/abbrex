@@ -37,7 +37,7 @@ public final class CaretTracker {
     ///   - popupWidth: Width of the overlay popup to perform boundary detection.
     ///   - popupHeight: Height of the overlay popup to perform boundary detection.
     /// - Returns: Calculated CaretRect with target top-left point and flip flags.
-    public static func getCaretScreenPosition(popupWidth: CGFloat = 340, popupHeight: CGFloat = 220) -> CaretRect {
+    public static func getCaretScreenPosition(popupWidth: CGFloat = 240, popupHeight: CGFloat = 150) -> CaretRect {
         var focusedElement: CFTypeRef?
 
         let result = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement)
@@ -131,7 +131,7 @@ public final class CaretTracker {
         return nil
     }
 
-    private static func computePosition(for caretRect: CGRect, popupWidth: CGFloat = 340, popupHeight: CGFloat = 220) -> CaretRect {
+    private static func computePosition(for caretRect: CGRect, popupWidth: CGFloat = 240, popupHeight: CGFloat = 150) -> CaretRect {
         let mainScreenHeight = NSScreen.screens.first?.frame.height ?? 1080
         let targetScreen = NSScreen.screens.first(where: { screen in
             let axTopLeftScreenFrame = CGRect(

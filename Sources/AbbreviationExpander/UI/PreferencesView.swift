@@ -10,6 +10,7 @@ public struct PreferencesView: View {
 
     // Stashed deleted item for undo functionality
     @State private var recentlyDeletedItem: (item: ExpansionPayload, index: Int)?
+    @State private var isPlusHovered = false
 
     public init(viewModel: AppViewModel) {
         self.viewModel = viewModel
@@ -104,12 +105,20 @@ public struct PreferencesView: View {
                 Button(action: createNewAbbreviation) {
                     Image(systemName: "plus")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.primary)
+                        .foregroundColor(isPlusHovered ? .primary : .secondary)
+                        .frame(width: 32, height: 32)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(isPlusHovered ? Color.primary.opacity(0.1) : Color(NSColor.controlBackgroundColor))
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .padding(6)
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(6)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.12)) {
+                        isPlusHovered = hovering
+                    }
+                }
                 .help("New abbreviation")
             }
             .padding(10)
@@ -261,6 +270,7 @@ struct ItemEditorView: View {
 
     @State private var prefix: String
     @State private var expansion: String
+    @State private var isTrashHovered = false
 
     init(
         item: ExpansionPayload,
@@ -298,10 +308,20 @@ struct ItemEditorView: View {
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                         .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(isTrashHovered ? .red.opacity(0.85) : .secondary)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(isTrashHovered ? Color.red.opacity(0.12) : Color.clear)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .padding(5)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.12)) {
+                        isTrashHovered = hovering
+                    }
+                }
                 .help("Delete abbreviation")
             }
             .padding(.horizontal, 16)

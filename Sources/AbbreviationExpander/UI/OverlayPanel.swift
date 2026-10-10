@@ -39,8 +39,8 @@ public final class OverlayPanel: NSPanel {
         candidateViewModel.matches = matches
         candidateViewModel.selectedIndex = selectedIndex
 
-        // Calculate dynamic height based on candidate match count
-        let contentHeight = min(CGFloat(matches.count * 46 + 28), AppConfig.popupMaxHeight)
+        // Calculate dynamic height based on candidate match count (compact 26px rows + 6px padding)
+        let contentHeight = min(CGFloat(matches.count) * 26 + 6, AppConfig.popupMaxHeight)
         let contentWidth = AppConfig.popupWidth
 
         // Compute anchored window origin relative to caret corner

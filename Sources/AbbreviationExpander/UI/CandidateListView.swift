@@ -23,54 +23,39 @@ public struct CandidateListView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            // Main Glassmorphism Popout Card containing candidates
-            VStack(alignment: .leading, spacing: 0) {
-                ScrollViewReader { proxy in
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: 2) {
-                            ForEach(Array(viewModel.matches.enumerated()), id: \.element.id) { index, match in
-                                CandidateRow(
-                                    match: match,
-                                    isSelected: index == viewModel.selectedIndex
-                                ) {
-                                    onSelectCandidate?(index)
-                                }
-                                .id(match.id)
-                            }
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 1) {
+                    ForEach(Array(viewModel.matches.enumerated()), id: \.element.id) { index, match in
+                        CandidateRow(
+                            match: match,
+                            isSelected: index == viewModel.selectedIndex
+                        ) {
+                            onSelectCandidate?(index)
                         }
-                        .padding(6)
+                        .id(match.id)
                     }
-                    .onChange(of: viewModel.selectedIndex) { newIndex in
-                        if newIndex >= 0 && newIndex < viewModel.matches.count {
-                            withAnimation(.easeInOut(duration: 0.1)) {
-                                proxy.scrollTo(viewModel.matches[newIndex].id, anchor: .center)
-                            }
-                        }
+                }
+                .padding(3)
+            }
+            .onChange(of: viewModel.selectedIndex) { newIndex in
+                if newIndex >= 0 && newIndex < viewModel.matches.count {
+                    withAnimation(.easeInOut(duration: 0.1)) {
+                        proxy.scrollTo(viewModel.matches[newIndex].id, anchor: .center)
                     }
                 }
             }
-            .frame(width: AppConfig.popupWidth, height: min(CGFloat(viewModel.matches.count * 46 + 14), AppConfig.popupMaxHeight))
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: Color.black.opacity(0.35), radius: 14, x: 0, y: 6)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-            )
-
-            // Transparent Instruction Badge outside the popout box (bottom-right aligned)
-            HStack {
-                Spacer()
-                Text("Tab / Enter / ⌃L / ↵ Click")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundColor(Color.white.opacity(0.65))
-                    .padding(.horizontal, 4)
-            }
-            .frame(width: AppConfig.popupWidth)
         }
+        .frame(width: AppConfig.popupWidth, height: min(CGFloat(viewModel.matches.count) * 26 + 6, AppConfig.popupMaxHeight))
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
+        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Abbreviation candidate list")
     }
@@ -85,40 +70,37 @@ public struct CandidateRow: View {
 
     public var body: some View {
         Button(action: onClick) {
-            HStack(alignment: .center, spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(match.prefix)
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
-                        .foregroundColor(isSelected ? .white : (isHovered ? .accentColor : .primary))
+            HStack(alignment: .center, spacing: 6) {
+                Text(match.prefix)
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundColor(isSelected ? .white : (isHovered ? .accentColor : .primary))
+                    .lineLimit(1)
 
-                    Text(previewText(match.expansion))
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(isSelected ? Color.white.opacity(0.85) : Color.secondary)
-                        .lineLimit(1)
-                }
+                Text(previewText(match.expansion))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(isSelected ? Color.white.opacity(0.82) : Color.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-                Spacer()
+                Spacer(minLength: 2)
 
                 if isSelected {
-                    Image(systemName: "return")
+                    Text("↵")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.white)
-                } else if isHovered {
-                    Image(systemName: "hand.tap")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.white.opacity(0.85))
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .frame(height: 25)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
                     .fill(rowBackgroundColor)
             )
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) {
+            withAnimation(.easeInOut(duration: 0.1)) {
                 isHovered = hovering
             }
         }
@@ -129,14 +111,15 @@ public struct CandidateRow: View {
         if isSelected {
             return Color.accentColor
         } else if isHovered {
-            return Color.primary.opacity(0.12)
+            return Color.primary.opacity(0.08)
         } else {
             return Color.clear
         }
     }
 
     private func previewText(_ text: String) -> String {
-        let clean = text.replacingOccurrences(of: "\n", with: " ↵ ")
-        return clean.count > 42 ? String(clean.prefix(42)) + "…" : clean
+        let clean = text.replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return clean.count > 30 ? String(clean.prefix(30)) + "…" : clean
     }
 }
