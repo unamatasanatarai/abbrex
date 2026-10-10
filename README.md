@@ -1,65 +1,120 @@
 # AbbrEx
 
 <p align="center">
-  <img src="Resources/AppIcon.png" width="120" height="120" alt="AbbrEx Icon" />
+  <img src="Resources/AppIcon.png" width="128" height="128" alt="AbbrEx Icon" />
 </p>
 
 <p align="center">
-  <strong>Native macOS abbreviation expansion engine with cursor-anchored candidate popouts and dynamic templating.</strong>
+  <strong>Native macOS abbreviation & snippet expansion engine with cursor-anchored candidate popouts, dynamic templating, and zero-allocation performance.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/unamatasanatarai/abbrex/releases/latest">
+    <img src="https://img.shields.io/badge/Download-Latest_DMG-blue?style=for-the-badge&logo=apple" alt="Download Latest DMG" />
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-GPL_v2.0-green?style=for-the-badge" alt="License: GPL v2.0" />
+  </a>
+  <img src="https://img.shields.io/badge/macOS-12.0+-lightgrey?style=for-the-badge&logo=apple" alt="macOS 12.0+" />
 </p>
 
 <p align="center">
   <a href="#key-features">Features</a> •
+  <a href="#download--installation">Download & Install</a> •
   <a href="#how-it-works">How It Works</a> •
-  <a href="#quick-start">Quick Start</a> •
   <a href="#dynamic-templates">Templates</a> •
-  <a href="#development">Development</a>
+  <a href="#permissions">Permissions</a> •
+  <a href="#development-and-building">Development</a> •
+  <a href="#license">License</a>
 </p>
 
 ---
 
-AbbrEx is a lightweight, zero-dependency menu bar application for macOS that turns short keystroke prefixes into full-length snippets, disclaimers, QA bug reports, and dynamic text templates across any application. 
+AbbrEx is a lightweight, zero-dependency menu bar application for macOS that expands short keystroke abbreviations into full snippets, disclaimers, boilerplate templates, and dynamic text across any macOS application.
 
-Instead of silently replacing text or forcing modal dialogs, AbbrEx monitors keystrokes through an in-memory prefix tree, anchors a floating candidate popout directly to your active text cursor, and replaces text in-place the moment you trigger expansion.
+Instead of silently replacing text or forcing intrusive modal dialogs, AbbrEx monitors keystrokes through an in-memory prefix tree, anchors a floating candidate popout directly to your active text insertion caret, and replaces text in-place the moment you trigger expansion.
 
 ---
 
-## Why AbbrEx?
+## Download & Installation
 
-Writing repetitive text—legal notices, bug reproduction steps, markdown skeletons, or email signatures—slows down writing flow and leads to inconsistent communication.
+### Option 1: Install with DMG (Recommended)
 
-* **Frictionless Typing**: Type short prefixes like `:sig`, `:disc`, or `qa-bug` anywhere in macOS without context switching.
-* **Visual Confirmation**: A non-intrusive floating HUD shows matching expansions next to your cursor with keyboard navigation before committing.
-* **Context-Aware Templating**: Auto-populate current dates, timestamps, and clipboard contents.
-* **Native & Lightweight**: Built strictly in Swift, AppKit, and SwiftUI with zero external dependencies, running silently in your menu bar.
+1. **Download the DMG**:
+   Get the latest release package directly from the [GitHub Releases page](https://github.com/unamatasanatarai/abbrex/releases/latest):
+   👉 **[Download Latest AbbrEx DMG](https://github.com/unamatasanatarai/abbrex/releases/latest)**
+
+2. **Mount and Install**:
+   - Double-click the downloaded `AbbrEx-1.0.0.dmg` file to open it.
+   - Drag **AbbrEx.app** into the **Applications** shortcut folder.
+
+3. **Launch and Grant Accessibility**:
+   - Launch **AbbrEx** from your Applications folder or Spotlight (`⌘ Space`).
+   - On first launch, grant **Accessibility** permission when prompted (System Settings → Privacy & Security → Accessibility). AbbrEx requires this permission to monitor abbreviation keystrokes and detect your typing caret position.
+
+---
+
+### Option 2: Build the DMG Locally
+
+If you prefer building from source, you can generate your own standalone DMG installer using `make`:
+
+```bash
+git clone git@github.com:unamatasanatarai/abbrex.git
+cd abbrex
+make dmg
+open build/AbbrEx-1.0.0.dmg
+```
+
+---
+
+### Option 3: Quick Direct Install via Make
+
+```bash
+git clone git@github.com:unamatasanatarai/abbrex.git
+cd abbrex
+make install
+```
+
+This compiles `AbbrEx.app`, signs the binary, and installs it directly into `/Applications/AbbrEx.app`.
 
 ---
 
 ## Key Features
 
-### Cursor-Anchored Candidate HUD
-Detects the exact screen coordinates of your active text insertion point across macOS applications using Accessibility APIs. The floating popout dynamically sizes and anchors to your cursor, automatically flipping vertically or horizontally to avoid screen edges.
+### 📍 Cursor-Anchored Candidate Popout (HUD)
+Detects the exact screen coordinates of your active text insertion point across macOS applications using native Accessibility APIs (`AXUIElement`). The floating candidate list dynamically sizes and anchors to your cursor, automatically flipping vertically or horizontally to stay within visible screen bounds.
 
-### O(k) Prefix Trie Engine
-Keystrokes are buffered in real time against an in-memory prefix tree. Candidate lookups complete in under 0.2 milliseconds, ensuring typing remains responsive with no perceptible input lag.
+### ⚡ Sub-Millisecond O(k) Trie Engine
+Keystrokes are buffered against an in-memory prefix tree with zero-allocation Unicode retrieval directly from `CGEvent`. Prefix lookups complete in under 0.2 milliseconds, ensuring native typing responsiveness with zero perceptible input lag.
 
-### Dynamic Variable Templates
-Templates evaluate on demand during expansion:
-* `{{date}}` / `{{date:YYYY-MM-DD}}`: Formatted calendar dates
+### 🧩 Dynamic Template Variables
+Templates evaluate dynamically on demand during expansion:
+* `{{date}}` / `{{date:YYYY-MM-DD}}`: Current calendar dates with custom formatting
 * `{{time}}`: Current system time
 * `{{clipboard}}`: Current pasteboard contents
 
-### Developer-Friendly Navigation
-Navigate candidate lists with arrow keys or Vim/Emacs bindings (`Ctrl+j` / `Ctrl+k`, `Ctrl+n` / `Ctrl+p`). Commit expansions instantly using `Tab`, `Enter`, `Ctrl+l`, or a mouse click.
+### ⌨️ Keyboard-Driven Navigation & Shortcuts
+* Navigate candidate matches with **Arrow Up/Down** or Vim/Emacs keybindings (**`Ctrl+j` / `Ctrl+k`**, **`Ctrl+n` / `Ctrl+p`**).
+* Commit expansions instantly with **`Tab`**, **`Enter`**, **`Ctrl+l`**, or a mouse click.
+* Press **`Esc`** at any time to dismiss the candidate HUD without interrupting your typing flow.
 
-### Continuous Autosave & Library Management
-Edit prefixes and expansions in a unified two-column library manager. All changes are saved automatically to persistent local storage (`~/Library/Application Support/AbbrEx/library.json`).
+### 🛠️ Intuitive Library Manager
+* **Inlined Snippet Previews**: Browse snippets in a clean master-detail sidebar displaying both abbreviation prefix and content previews.
+* **Instant Search Filter**: Quick search filter with instant **`Esc`** key clearing.
+* **Fast Snippet Creation**: Hit **`+`** to create a new abbreviation. If empty, pressing **`Esc`** automatically cancels creation and returns the cursor directly to search.
+* **Hover Deletion with Undo Protection**: Delete snippets on hover with an undo restore bar. Empty drafts are automatically pruned on click-away or cancellation without annoying undo prompts.
+* **Non-Blocking Background Windowing**: Pressing **`⌘W`** closes the Preferences window while keeping the expander active in the background.
 
-### Interactive Live Sandbox
-Test abbreviation expansions and observe keystroke buffer states, trie lookup performance, and engine lifecycle transitions in real time without switching apps.
+### 💾 Flexible JSON Import & Export
+* Export and import your snippet library via the top menu bar (**File → Export / Import**) or the in-app options menu (`...`).
+* Supports native AbbrEx JSON schemas, optional field schemas, and simple key-value dictionaries (`{ ":prefix": "expansion" }`) without requiring snippet IDs.
+* Automatically strips empty drafts on export to keep your backups pristine.
 
-### Native Menu Bar Presence
-Designed with an adaptive template status bar icon that automatically switches between dark and light appearances, plus non-intrusive permission warnings when Accessibility access is needed.
+### 🛡️ Safe Double-Tap `⌘Q` Protection
+Prevents accidental app termination while typing with a double-tap shortcut guard. Pressing **`⌘Q`** once displays a floating HUD prompt (*"Press ⌘Q again to quit"*); pressing it again within 1.5 seconds confirms termination.
+
+### 🌓 Native Menu Bar Integration
+Features an adaptive template status bar icon that conforms to both macOS Dark Mode and Light Mode. Left-click opens Preferences; right-click reveals a quick action context menu.
 
 ---
 
@@ -79,46 +134,15 @@ Designed with an adaptive template status bar icon that automatically switches b
 
 ## Dynamic Templates
 
-AbbrEx supports embedded template variables directly within the expansion text editor:
+AbbrEx supports embedded dynamic variables directly within expansion text:
 
 | Variable | Description | Output Example |
 | :--- | :--- | :--- |
-| `{{date}}` | Formatted calendar date | `2026-10-09` |
-| `{{date:YYYY/MM/DD}}` | Custom date formatting | `2026/10/09` |
-| `{{time}}` | Current system time | `21:28` |
+| `{{date}}` | Formatted calendar date | `Oct 10, 2026` |
+| `{{date:YYYY-MM-DD}}` | ISO 8601 date formatting | `2026-10-10` |
+| `{{date:YYYY/MM/DD}}` | Custom slash date formatting | `2026/10/10` |
+| `{{time}}` | Current 24-hour time | `11:05:30` |
 | `{{clipboard}}` | Injects current pasteboard text | Output of your latest copy action |
-
----
-
-## Quick Start
-
-### Prerequisites
-* macOS 12.0 (Monterey) or later
-* Xcode Command Line Tools (`xcode-select --install`)
-
-### Build and Launch
-
-Clone the repository and launch the app using `make`:
-
-```bash
-git clone git@github.com:unamatasanatarai/abbrex.git
-cd abbrex
-make run
-```
-
-To launch without rebuilding (preserving Accessibility TCC approval):
-
-```bash
-make launch
-```
-
-### Install to Applications
-
-```bash
-make install
-```
-
-This compiles `AbbrEx.app`, signs the binary, and installs it into `/Applications/AbbrEx.app`.
 
 ---
 
@@ -138,42 +162,22 @@ make revoke
 
 ---
 
-## Development & Testing
+## Development and Building
 
 The project includes automated verification and build targets managed via the `Makefile`:
 
 ```bash
 make test             # Run native Swift unit test suite
 make build            # Compile and code-sign build/AbbrEx.app
-make dmg              # Generate standalone macOS DMG installer
+make run              # Build and launch AbbrEx.app
+make launch           # Launch AbbrEx.app without rebuilding (preserves TCC permissions)
+make dmg              # Generate standalone macOS DMG installer package
 make release-dry-run  # Preview GitHub release tagging and packaging
-make clean            # Remove build artifacts and reset permissions
-```
-
-### Architecture Overview
-
-```text
-Sources/AbbreviationExpander/
-├── Core/
-│   ├── Models.swift          # Expansion payload and engine state models
-│   ├── Trie.swift            # O(k) prefix tree lookup structure
-│   ├── StateMachine.swift    # Keystroke buffer lifecycle and state transitions
-│   ├── TemplateEngine.swift  # Variable evaluation (date, time, clipboard)
-│   ├── CaretTracker.swift    # Screen position detection via AXUIElement
-│   ├── TextReplacer.swift    # Automated backspace deletion and text insertion
-│   ├── LibraryStorage.swift  # Atomic JSON persistence (~/Library/Application Support/AbbrEx)
-│   └── AppConfig.swift       # Overlay geometry and delay configuration
-├── Services/
-│   └── EventMonitor.swift    # Global CGEventTap keystroke interception
-└── UI/
-    ├── AppViewModel.swift    # Reactive state management and synchronization
-    ├── OverlayPanel.swift    # Floating non-activating NSPanel window
-    ├── CandidateListView.swift # Cursor-anchored candidate selection UI
-    └── PreferencesView.swift # Library editor, sandbox, and permission management
+make clean            # Remove build artifacts and temporary binaries
 ```
 
 ---
 
 ## License
 
-Copyright © 2026. All rights reserved.
+This project is licensed under the terms of the [GNU General Public License v2.0 (GPL-2.0)](LICENSE).
