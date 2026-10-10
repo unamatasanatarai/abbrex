@@ -29,7 +29,7 @@ swiftc -sdk "$SDK_PATH" \
     Sources/AbbreviationExpander/Core/*.swift \
     Sources/AbbreviationExpander/UI/*.swift \
     Sources/AbbreviationExpander/Services/*.swift \
-    Sources/AbbreviationExpander/Main.swift \
+    Sources/AbbreviationExpander/*.swift \
     -o "$MACOS_DIR/AbbrEx"
 
 echo "2. Generating Info.plist..."
