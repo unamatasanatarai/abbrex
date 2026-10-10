@@ -312,8 +312,4 @@ public final class AppViewModel: ObservableObject {
         saveLibrary(immediate: true)
         reloadTrie()
     }
-
-    public func resetToDefaultSnippets() {
-        replaceLibrary(with: AppConfig.defaultSnippets)
-    }
 }

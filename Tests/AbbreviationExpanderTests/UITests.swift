@@ -196,17 +196,14 @@ public struct UITests {
 
             var imported = false
             var exported = false
-            var restored = false
             let actionMenu = ActionMenuButton(
                 onImport: { imported = true },
-                onExport: { exported = true },
-                onRestoreDefaults: { restored = true }
+                onExport: { exported = true }
             )
             _ = actionMenu.body
             actionMenu.onImport()
             actionMenu.onExport()
-            actionMenu.onRestoreDefaults?()
-            assert(imported && exported && restored, "ActionMenuButton actions failed")
+            assert(imported && exported, "ActionMenuButton actions failed")
 
             // Clean up
             try? storage.removeStorageFile()

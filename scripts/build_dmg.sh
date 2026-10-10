@@ -26,6 +26,11 @@ if [ ! -f "Resources/dmg_background.png" ] || [ ! -f "Resources/dmg_background@2
     python3 scripts/generate_dmg_background.py
 fi
 
+# Unmount any existing mounts of this volume if previously opened
+for mount in $(hdiutil info | grep -E "/Volumes/$APP_NAME( [0-9]+)?$" | awk '{print $NF}'); do
+    hdiutil detach "$mount" -force >/dev/null 2>&1 || true
+done
+
 echo "==> Creating styled DMG installer package..."
 rm -rf "$BUILD_DIR/dmg_root" "$TMP_DMG" "$DMG_PATH"
 mkdir -p "$BUILD_DIR/dmg_root/.background"

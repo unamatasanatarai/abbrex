@@ -128,8 +128,7 @@ public struct PreferencesView: View {
 
                 ActionMenuButton(
                     onImport: { viewModel.importLibraryWithOpenPanel() },
-                    onExport: { viewModel.exportLibraryWithSavePanel() },
-                    onRestoreDefaults: { viewModel.resetToDefaultSnippets() }
+                    onExport: { viewModel.exportLibraryWithSavePanel() }
                 )
             }
             .padding(10)
@@ -512,7 +511,6 @@ struct PlusIconButton: View {
 struct ActionMenuButton: View {
     let onImport: () -> Void
     let onExport: () -> Void
-    var onRestoreDefaults: (() -> Void)? = nil
     @State private var isHovered = false
 
     var body: some View {
@@ -522,12 +520,6 @@ struct ActionMenuButton: View {
             }
             Button(action: onExport) {
                 Label("Export to JSON...", systemImage: "square.and.arrow.up")
-            }
-            if let onRestore = onRestoreDefaults {
-                Divider()
-                Button(action: onRestore) {
-                    Label("Restore Default Snippets", systemImage: "arrow.counterclockwise")
-                }
             }
         } label: {
             Image(systemName: "ellipsis")
