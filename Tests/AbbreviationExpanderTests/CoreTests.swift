@@ -31,7 +31,8 @@ public struct CoreTests {
 
             assert(AppConfig.appName == "AbbrEx", "appName mismatch")
             assert(AppConfig.bundleIdentifier == "com.citizen.AbbreviationExpander", "bundleIdentifier mismatch")
-            assert(AppConfig.version == "1.0.1", "version mismatch")
+            let expectedVersion = (try? String(contentsOfFile: "VERSION", encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "1.0.2"
+            assert(AppConfig.version == expectedVersion, "version mismatch: got \(AppConfig.version), expected \(expectedVersion)")
             assert(!AppConfig.defaultSnippets.isEmpty, "defaultSnippets should not be empty")
         }
 

@@ -6,8 +6,13 @@ echo "=== Building AbbrEx Native macOS Application ==="
 SDK_PATH=$(xcrun --show-sdk-path)
 APP_NAME="AbbrEx"
 BUNDLE_ID="com.citizen.AbbreviationExpander"
-VERSION=$(grep 'public static let version' Sources/AbbreviationExpander/Core/AppConfig.swift | sed -E 's/.*"([^"]+)".*/\1/')
-[ -z "$VERSION" ] && VERSION="1.0.1"
+if [ -f "VERSION" ]; then
+    VERSION=$(tr -d '[:space:]' <VERSION)
+elif [ -f "../VERSION" ]; then
+    VERSION=$(tr -d '[:space:]' <../VERSION)
+else
+    VERSION="1.0.2"
+fi
 BUILD_DIR="build"
 APP_DIR="$BUILD_DIR/$APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
@@ -19,6 +24,9 @@ mkdir -p "$RESOURCES_DIR"
 
 if [ -d "Resources" ]; then
     cp -R Resources/* "$RESOURCES_DIR/"
+fi
+if [ -f "VERSION" ]; then
+    cp "VERSION" "$RESOURCES_DIR/VERSION"
 fi
 
 echo "1. Compiling Swift source files with Whole-Module-Optimization..."

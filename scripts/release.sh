@@ -3,8 +3,13 @@ set -e
 
 APP_NAME="AbbrEx"
 BUNDLE_ID="com.citizen.AbbreviationExpander"
-VERSION=$(grep 'public static let version' Sources/AbbreviationExpander/Core/AppConfig.swift | sed -E 's/.*"([^"]+)".*/\1/')
-[ -z "$VERSION" ] && VERSION="1.0.1"
+if [ -f "VERSION" ]; then
+    VERSION=$(tr -d '[:space:]' <VERSION)
+elif [ -f "../VERSION" ]; then
+    VERSION=$(tr -d '[:space:]' <../VERSION)
+else
+    VERSION="1.0.2"
+fi
 BUILD_DIR="build"
 DMG_NAME="AbbrEx-$VERSION.dmg"
 DMG_PATH="$BUILD_DIR/$DMG_NAME"
@@ -12,6 +17,20 @@ DMG_PATH="$BUILD_DIR/$DMG_NAME"
 DRY_RUN=false
 if [ "$1" = "--dry-run" ]; then
     DRY_RUN=true
+fi
+
+# Fail-fast if tag already exists (before running tests or building DMG)
+if [ "$DRY_RUN" = false ]; then
+    if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+        echo "❌ Error: Git tag 'v$VERSION' already exists locally!"
+        echo "Please bump the version in the VERSION file before running 'make release'."
+        exit 1
+    fi
+    if git ls-remote --tags origin "refs/tags/v$VERSION" 2>/dev/null | grep -q "v$VERSION"; then
+        echo "❌ Error: Git tag 'v$VERSION' already exists on remote origin!"
+        echo "Please bump the version in the VERSION file before running 'make release'."
+        exit 1
+    fi
 fi
 
 # Fallback: If GITHUB_TOKEN environment variable is invalid, unset it to use the local keyring
@@ -35,33 +54,17 @@ RELEASE_NOTES=$(
     cat <<EOF
 ## AbbrEx v$VERSION
 
-### 🚀 Default Snippets Overhaul
-* Replaced verbose boilerplate with clean, everyday essentials:
-  * \`gg\` ➔ \`good game\`
-  * \`:shrug\` ➔ \`¯\\_(ツ)_/¯\`
-  * \`ty\` ➔ \`Thank you!\`
-  * \`eus\` ➔ \`unamatasanatarai@gmail.com\`
-  * \`:buu\` ➔ Homebrew cache cleanup & greedy upgrade command
-
-### 🧪 Comprehensive Native Test Suite
-* Added 16-suite native unit test coverage across the entire codebase:
-  * **Core Suite**: Exhaustive Trie prefix tree indexing, dynamic template variable evaluation (\`{{date}}\`, \`{{time}}\`, \`{{clipboard}}\`), state machine lifecycle transitions, storage persistence & corruption recovery, caret screen coordinate boundary flipping, text replacer event flags.
-  * **System Event Monitoring**: Keyboard keycode dispatch, modifier keys (\`⌘\`, \`⌥\`, \`⌃\`), arrow key navigation, Ctrl shortcuts (\`Ctrl+j/k/n/p/l\`), mouse click filtering.
-  * **UI & ViewModels**: Candidate list popout, floating overlay panel geometry, ViewModel CRUD & JSON schema parsing, PreferencesView cancellation & undo restoration, AppKit custom controls.
-  * **App Lifecycle**: AppDelegate menus, Preferences window single-instance enforcement, About dialog, double-tap \`⌘Q\` quit guard HUD.
-
-### 🏗️ Codebase Modularization
-* Extracted \`AppDelegate.swift\` from \`Main.swift\` for clean application lifecycle separation and testability.
-* Single-entry \`@main struct AbbrExMain\` entry point with Whole-Module-Optimization support.
-
-### 📖 Documentation & Distribution
-* Overhauled \`README.md\` to remove internal architecture diagrams and highlight current features.
-* Added direct links to download latest DMG release package.
-* Added step-by-step DMG installation and macOS Accessibility permission setup guide.
-* Updated license reference to GPL-2.0.
+### 🚀 Highlights & Improvements
+* **Razor-Sharp Status Bar Icon**: Dynamically rendered via CoreGraphics vector paths, eliminating Retina display scaling blur.
+* **Enhanced Replacement & Security**: Thread-safe replacement flag, background keystroke simulation, and automatic gating for macOS secure input fields (passwords, PINs).
+* **Snippet Organization**: Automatic alphabetical sorting by prefix throughout library storage, view models, and preferences search.
+* **Updated Defaults & Bundling**: Streamlined default snippets bundled in \`Resources/default-snippets.json\`.
 
 ### 📝 Commits Since $PREV_TAG
 $COMMIT_LOG
+
+---
+*Built with native Swift for macOS 12.0+.*
 EOF
 )
 
