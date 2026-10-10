@@ -15,6 +15,11 @@ public struct ServiceTests {
             let sm = StateMachine(trie: trie)
             let monitor = EventMonitor(stateMachine: sm)
 
+            var replacedItems: [(prefixLength: Int, text: String)] = []
+            monitor.onReplace = { len, eval in
+                replacedItems.append((len, eval.text))
+            }
+
             // 1. Lifecycle start and stop
             monitor.start()
             monitor.stop()
@@ -90,7 +95,9 @@ public struct ServiceTests {
             let tabConsumed = monitor.handleCGEvent(tabEvent, type: .keyDown)
             assert(tabConsumed, "Tab on active popup should consume event (return true)")
             assert(sm.state == .idle, "State should be IDLE after expansion")
-            TextReplacer.isReplacing = false
+            assert(replacedItems.count == 1, "Tab should trigger onReplace")
+            assert(replacedItems[0].prefixLength == 3, "Prefix length should be 3")
+            assert(replacedItems[0].text == "be right back", "Replacement text should match")
 
             // Enter on non-active state returns false
             let enterEvent = CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: true)!
@@ -162,7 +169,9 @@ public struct ServiceTests {
             ctrlL.flags = .maskControl
             assert(monitor.handleCGEvent(ctrlL, type: .keyDown), "Ctrl+l should consume and expand")
             assert(sm.state == .idle, "State should be IDLE after Ctrl+l expansion")
-            TextReplacer.isReplacing = false
+            assert(replacedItems.count == 2, "Ctrl+l should trigger onReplace")
+            assert(replacedItems[1].prefixLength == 1, "Prefix length should be 1 (bounded by buffer count)")
+            assert(replacedItems[1].text == "be right back", "Replacement text should match")
 
             // Other Ctrl key when idle
             let otherCtrl = CGEvent(keyboardEventSource: nil, virtualKey: 0x00, keyDown: true)!

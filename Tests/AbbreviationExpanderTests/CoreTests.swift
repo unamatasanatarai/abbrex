@@ -41,7 +41,7 @@ public struct CoreTests {
             let items = DefaultLibrary.defaultItems
             assert(items.count == 4, "Expected 4 default items, got \(items.count)")
             assert(items.map(\.prefix) == [":buu", ":shrug", "ty", "wtf"], "Default prefixes mismatch: \(items.map(\.prefix))")
-            assert(items[0].expansion == "brew update ; brew upgrade --no-quarantine --cask --greedy ;brew upgrade --no-quarantine --greedy ; brew cleanup --prune=all -s", ":buu expansion mismatch")
+            assert(items[0].expansion == "brew update ; brew upgrade --cask --greedy ;brew upgrade --greedy ; brew cleanup --prune=all -s", ":buu expansion mismatch")
             assert(items[1].expansion == "¯\\_(ツ)_/¯", ":shrug expansion mismatch")
             assert(items[2].expansion == "Thank you!", "ty expansion mismatch")
             assert(items[3].expansion == "Well... Shave my legs and paint me blue!", "wtf expansion mismatch")
@@ -414,14 +414,20 @@ public struct CoreTests {
 
         // MARK: - 9. TextReplacer Tests
         testRunner("TextReplacer - Flag Management & Replacer Invocation") {
+            TextReplacer.resetSandbox()
+            TextReplacer.isTestSandbox = true
+
             assert(!TextReplacer.isReplacing, "Initial isReplacing should be false")
             TextReplacer.isReplacing = true
             assert(TextReplacer.isReplacing, "isReplacing flag setter failed")
             TextReplacer.isReplacing = false
 
-            // Replace invocation handles non-empty and empty text safely without crashing
-            TextReplacer.replace(prefixLength: 0, evaluated: EvaluatedTemplate(text: ""))
+            // Replace invocation handles non-empty and empty text safely in test sandbox
+            TextReplacer.replace(prefixLength: 3, evaluated: EvaluatedTemplate(text: "expanded text"))
             assert(TextReplacer.isReplacing, "isReplacing should be true during replacement execution")
+            assert(TextReplacer.recordedReplacements.count == 1, "Should record replacement in sandbox")
+            assert(TextReplacer.recordedReplacements[0].prefixLength == 3, "prefixLength mismatch")
+            assert(TextReplacer.recordedReplacements[0].evaluated.text == "expanded text", "evaluated text mismatch")
 
             // Verify deferred reset
             let deadline = Date().addingTimeInterval(0.3)
@@ -429,6 +435,16 @@ public struct CoreTests {
                 RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
             }
             assert(!TextReplacer.isReplacing, "isReplacing should reset to false after deferred duration")
+
+            // Test custom handler
+            var customCalled = false
+            TextReplacer.customHandler = { _, _ in
+                customCalled = true
+            }
+            TextReplacer.replace(prefixLength: 1, evaluated: EvaluatedTemplate(text: "custom"))
+            assert(customCalled, "customHandler should be invoked")
+            TextReplacer.resetSandbox()
+            TextReplacer.isTestSandbox = true
         }
     }
 }

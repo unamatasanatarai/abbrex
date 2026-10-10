@@ -15,6 +15,18 @@ public final class EventMonitor {
     public var stateMachine: StateMachine
     public weak var overlayPanel: OverlayPanel?
 
+    /// Optional replacement delegate for testing and sandboxing.
+    /// When non-nil, EventMonitor dispatches replacements here instead of invoking TextReplacer.
+    public var onReplace: ((_ prefixLength: Int, _ evaluated: EvaluatedTemplate) -> Void)? = nil
+
+    private func executeReplacement(prefixLength: Int, evaluated: EvaluatedTemplate) {
+        if let onReplace = self.onReplace {
+            onReplace(prefixLength, evaluated)
+        } else {
+            TextReplacer.replace(prefixLength: prefixLength, evaluated: evaluated)
+        }
+    }
+
     public init(stateMachine: StateMachine) {
         self.stateMachine = stateMachine
     }
@@ -172,7 +184,7 @@ public final class EventMonitor {
         if keyCode == 0x30 || keyCode == 0x24 || keyCode == 0x4C {
             if stateMachine.state == .popupActive {
                 if let expansionResult = stateMachine.processSelectionToExpand() {
-                    TextReplacer.replace(prefixLength: expansionResult.prefixLength, evaluated: expansionResult.evaluated)
+                    executeReplacement(prefixLength: expansionResult.prefixLength, evaluated: expansionResult.evaluated)
                     return true // Consume Tab / Enter event system-wide!
                 }
             }
@@ -231,7 +243,7 @@ public final class EventMonitor {
                     return true
                 } else if keyCode == 0x25 { // l -> Expand
                     if let expansionResult = stateMachine.processSelectionToExpand() {
-                        TextReplacer.replace(prefixLength: expansionResult.prefixLength, evaluated: expansionResult.evaluated)
+                        executeReplacement(prefixLength: expansionResult.prefixLength, evaluated: expansionResult.evaluated)
                         return true
                     }
                 }

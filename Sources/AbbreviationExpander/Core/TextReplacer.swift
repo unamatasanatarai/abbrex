@@ -26,12 +26,46 @@ public final class TextReplacer {
         }
     }
 
+    /// Global testing flag to sandbox replacements and prevent posting synthetic CGEvents to the system.
+    public static var isTestSandbox: Bool = false
+
+    /// Custom replacement handler for testing or interception.
+    public static var customHandler: ((_ prefixLength: Int, _ evaluated: EvaluatedTemplate) -> Void)? = nil
+
+    /// Audit log of recorded replacements in test sandbox mode.
+    public static var recordedReplacements: [(prefixLength: Int, evaluated: EvaluatedTemplate)] = []
+
+    /// Resets sandbox state and recorded replacements.
+    public static func resetSandbox() {
+        customHandler = nil
+        recordedReplacements.removeAll()
+        isReplacing = false
+    }
+
     /// Replaces the typed abbreviation prefix with expanded template content.
     /// - Parameters:
     ///   - prefixLength: Number of characters typed in abbreviation to backspace/delete.
     ///   - evaluated: Evaluated template text content.
     public static func replace(prefixLength: Int, evaluated: EvaluatedTemplate) {
         isReplacing = true
+
+        // Testing sandbox path: route to custom handler or record in audit log without posting live OS events
+        if let handler = customHandler {
+            recordedReplacements.append((prefixLength, evaluated))
+            handler(prefixLength, evaluated)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                isReplacing = false
+            }
+            return
+        }
+
+        if isTestSandbox {
+            recordedReplacements.append((prefixLength, evaluated))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                isReplacing = false
+            }
+            return
+        }
 
         // Strategy A: Try Native macOS Accessibility API replacement (Fast, precise, zero clipboard side-effects)
         if replaceViaAccessibility(prefixLength: prefixLength, evaluated: evaluated) {

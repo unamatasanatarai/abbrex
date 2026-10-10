@@ -7,7 +7,7 @@ public struct DefaultLibrary {
         ExpansionPayload(
             id: ":buu",
             prefix: ":buu",
-            expansion: "brew update ; brew upgrade --no-quarantine --cask --greedy ;brew upgrade --no-quarantine --greedy ; brew cleanup --prune=all -s"
+            expansion: "brew update ; brew upgrade --cask --greedy ;brew upgrade --greedy ; brew cleanup --prune=all -s"
         ),
         ExpansionPayload(
             id: ":shrug",

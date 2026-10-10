@@ -8,6 +8,9 @@ struct TestMain {
         print("  Running Abbreviation Expander Native Test Suite  ")
         print("==================================================")
 
+        // Globally sandbox all text replacements so tests NEVER post synthetic keystrokes to the OS
+        TextReplacer.isTestSandbox = true
+
         var passed = 0
         var failed = 0
         let totalStart = CFAbsoluteTimeGetCurrent()
