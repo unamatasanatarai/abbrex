@@ -7,6 +7,7 @@ public struct PreferencesView: View {
 
     @State private var searchText = ""
     @State private var selectedItemId: String?
+    @State private var focusSearchField = false
 
     // Stashed deleted item for undo functionality
     @State private var recentlyDeletedItem: (item: ExpansionPayload, index: Int)?
@@ -33,6 +34,9 @@ public struct PreferencesView: View {
             }
         }
         .frame(minWidth: 620, idealWidth: 700, minHeight: 400, idealHeight: 480)
+        .onExitCommand {
+            cancelCurrentItemIfEmpty()
+        }
         .onAppear {
             if selectedItemId == nil {
                 selectedItemId = viewModel.libraryItems.first?.id
@@ -95,7 +99,14 @@ public struct PreferencesView: View {
                     MacSingleLineTextField(
                         placeholder: "Search...",
                         text: $searchText,
-                        font: .systemFont(ofSize: 12)
+                        font: .systemFont(ofSize: 12),
+                        focusTrigger: $focusSearchField,
+                        onEscape: {
+                            if !searchText.isEmpty {
+                                searchText = ""
+                            }
+                            return true
+                        }
                     )
                     .frame(height: 20)
 
@@ -175,6 +186,9 @@ public struct PreferencesView: View {
                 isNew: item.prefix.isEmpty && item.expansion.isEmpty,
                 onUpdate: { updated in
                     viewModel.updateItem(updated)
+                },
+                onCancel: {
+                    cancelCurrentItemIfEmpty(id: item.id)
                 }
             )
             .id(item.id)
@@ -216,6 +230,27 @@ public struct PreferencesView: View {
 
         let newItem = viewModel.addItem(prefix: "", expansion: "")
         selectedItemId = newItem.id
+    }
+
+    private func cancelCurrentItemIfEmpty(id: String? = nil) {
+        let targetId = id ?? selectedItemId
+        guard let targetId = targetId,
+              let item = viewModel.libraryItems.first(where: { $0.id == targetId }) else {
+            return
+        }
+
+        let isBlank = item.prefix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                      item.expansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        if isBlank {
+            deleteItem(item)
+            focusSearch()
+        }
+    }
+
+    private func focusSearch() {
+        focusSearchField = true
+        NotificationCenter.default.post(name: .focusSearchField, object: nil)
     }
 
     private func deleteItem(_ item: ExpansionPayload) {
@@ -288,6 +323,7 @@ struct ItemEditorView: View {
     let item: ExpansionPayload
     let isNew: Bool
     let onUpdate: (ExpansionPayload) -> Void
+    let onCancel: () -> Void
 
     @State private var prefix: String
     @State private var expansion: String
@@ -295,13 +331,26 @@ struct ItemEditorView: View {
     init(
         item: ExpansionPayload,
         isNew: Bool,
-        onUpdate: @escaping (ExpansionPayload) -> Void
+        onUpdate: @escaping (ExpansionPayload) -> Void,
+        onCancel: @escaping () -> Void = {}
     ) {
         self.item = item
         self.isNew = isNew
         self.onUpdate = onUpdate
+        self.onCancel = onCancel
         _prefix = State(initialValue: item.prefix)
         _expansion = State(initialValue: item.expansion)
+    }
+
+    private func handleEscapeIfEmpty() -> Bool {
+        let isBlank = prefix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                      expansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if isBlank {
+            onUpdate(ExpansionPayload(id: item.id, prefix: "", expansion: "", tags: item.tags))
+            onCancel()
+            return true
+        }
+        return false
     }
 
     var body: some View {
@@ -317,7 +366,8 @@ struct ItemEditorView: View {
                     text: $prefix,
                     font: .systemFont(ofSize: 14),
                     isMonospaced: true,
-                    isAutoFocused: isNew
+                    isAutoFocused: isNew,
+                    onEscape: handleEscapeIfEmpty
                 )
                 .frame(height: 22)
 
@@ -331,7 +381,8 @@ struct ItemEditorView: View {
             // Expansion multiline textarea: native NSTextView ensuring no cursor jumps
             MacTextEditor(
                 text: $expansion,
-                font: .monospacedSystemFont(ofSize: 13, weight: .regular)
+                font: .monospacedSystemFont(ofSize: 13, weight: .regular),
+                onEscape: handleEscapeIfEmpty
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(NSColor.controlBackgroundColor))
@@ -483,14 +534,16 @@ struct ActionMenuButton: View {
     }
 }
 
-// MARK: - MacSingleLineTextField (Single-line input, no multiline wrapping, handles Cmd+A)
+// MARK: - MacSingleLineTextField (Single-line input, no multiline wrapping, handles Cmd+A, focus trigger, onEscape)
 struct MacSingleLineTextField: NSViewRepresentable {
     var placeholder: String
     @Binding var text: String
     var font: NSFont
     var isMonospaced: Bool
     var isAutoFocused: Bool
+    var focusTrigger: Binding<Bool>?
     var onCommit: (() -> Void)?
+    var onEscape: (() -> Bool)?
 
     init(
         placeholder: String,
@@ -498,14 +551,18 @@ struct MacSingleLineTextField: NSViewRepresentable {
         font: NSFont = .systemFont(ofSize: 12),
         isMonospaced: Bool = false,
         isAutoFocused: Bool = false,
-        onCommit: (() -> Void)? = nil
+        focusTrigger: Binding<Bool>? = nil,
+        onCommit: (() -> Void)? = nil,
+        onEscape: (() -> Bool)? = nil
     ) {
         self.placeholder = placeholder
         self._text = text
         self.font = font
         self.isMonospaced = isMonospaced
         self.isAutoFocused = isAutoFocused
+        self.focusTrigger = focusTrigger
         self.onCommit = onCommit
+        self.onEscape = onEscape
     }
 
     func makeCoordinator() -> Coordinator {
@@ -529,20 +586,69 @@ struct MacSingleLineTextField: NSViewRepresentable {
         textField.delegate = context.coordinator
         textField.shouldAutoFocusOnAppear = isAutoFocused
 
+        context.coordinator.textField = textField
+
+        if focusTrigger != nil {
+            context.coordinator.setupSearchFocusObserver()
+        }
+
         return textField
     }
 
     func updateNSView(_ nsView: NSTextField, context: Context) {
+        context.coordinator.parent = self
         if nsView.stringValue != text {
             nsView.stringValue = text
+        }
+
+        if let trigger = focusTrigger, trigger.wrappedValue {
+            DispatchQueue.main.async {
+                trigger.wrappedValue = false
+                if let window = nsView.window {
+                    window.makeFirstResponder(nsView)
+                    nsView.selectText(nil)
+                }
+            }
         }
     }
 
     class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: MacSingleLineTextField
+        weak var textField: NSTextField?
+        private var observerToken: NSObjectProtocol?
 
         init(_ parent: MacSingleLineTextField) {
             self.parent = parent
+        }
+
+        deinit {
+            if let token = observerToken {
+                NotificationCenter.default.removeObserver(token)
+            }
+        }
+
+        func setupSearchFocusObserver() {
+            guard observerToken == nil else { return }
+            observerToken = NotificationCenter.default.addObserver(
+                forName: .focusSearchField,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                guard let tf = self?.textField else { return }
+                DispatchQueue.main.async {
+                    if let window = tf.window {
+                        window.makeFirstResponder(tf)
+                        tf.selectText(nil)
+                    }
+                }
+            }
+        }
+
+        func handleEscape() -> Bool {
+            if let onEscape = parent.onEscape {
+                return onEscape()
+            }
+            return false
         }
 
         func controlTextDidChange(_ obj: Notification) {
@@ -568,10 +674,10 @@ struct MacSingleLineTextField: NSViewRepresentable {
             }
             if commandSelector == #selector(NSResponder.cancelOperation(_:)) ||
                commandSelector == #selector(NSStandardKeyBindingResponding.complete(_:)) {
-                parent.text = ""
-                (control as? NSTextField)?.stringValue = ""
-                textView.string = ""
-                return true
+                if handleEscape() {
+                    return true
+                }
+                return false
             }
             return false
         }
@@ -586,17 +692,18 @@ final class CustomNSTextField: NSTextField {
         if shouldAutoFocusOnAppear, let window = self.window {
             DispatchQueue.main.async {
                 window.makeFirstResponder(self)
+                self.selectText(nil)
             }
         }
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.keyCode == 53 { // ESC key clears field
-            self.stringValue = ""
+        if event.keyCode == 53 { // ESC key
             if let delegate = self.delegate as? MacSingleLineTextField.Coordinator {
-                delegate.parent.text = ""
+                if delegate.handleEscape() {
+                    return true
+                }
             }
-            return true
         }
         if event.modifierFlags.contains(.command) {
             let key = event.charactersIgnoringModifiers?.lowercased()
@@ -611,6 +718,26 @@ final class CustomNSTextField: NSTextField {
         }
         return super.performKeyEquivalent(with: event)
     }
+
+    override func cancelOperation(_ sender: Any?) {
+        if let delegate = self.delegate as? MacSingleLineTextField.Coordinator {
+            if delegate.handleEscape() {
+                return
+            }
+        }
+        super.cancelOperation(sender)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            if let delegate = self.delegate as? MacSingleLineTextField.Coordinator {
+                if delegate.handleEscape() {
+                    return
+                }
+            }
+        }
+        super.keyDown(with: event)
+    }
 }
 
 // MARK: - MacTextEditor (Regular textarea, handles Cmd+A, never jumps cursor to end on typing)
@@ -618,15 +745,18 @@ struct MacTextEditor: NSViewRepresentable {
     @Binding var text: String
     var font: NSFont = .monospacedSystemFont(ofSize: 13, weight: .regular)
     var isEditable: Bool = true
+    var onEscape: (() -> Bool)?
 
     init(
         text: Binding<String>,
         font: NSFont = .monospacedSystemFont(ofSize: 13, weight: .regular),
-        isEditable: Bool = true
+        isEditable: Bool = true,
+        onEscape: (() -> Bool)? = nil
     ) {
         self._text = text
         self.font = font
         self.isEditable = isEditable
+        self.onEscape = onEscape
     }
 
     func makeCoordinator() -> Coordinator {
@@ -680,6 +810,7 @@ struct MacTextEditor: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
+        context.coordinator.parent = self
         guard let textView = nsView.documentView as? NSTextView else { return }
 
         // CRITICAL: Only update if the string has changed externally!
@@ -702,6 +833,13 @@ struct MacTextEditor: NSViewRepresentable {
             self.parent = parent
         }
 
+        func handleEscape() -> Bool {
+            if let onEscape = parent.onEscape {
+                return onEscape()
+            }
+            return false
+        }
+
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             let currentString = textView.string
@@ -709,11 +847,28 @@ struct MacTextEditor: NSViewRepresentable {
                 parent.text = currentString
             }
         }
+
+        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) ||
+               commandSelector == #selector(NSStandardKeyBindingResponding.complete(_:)) {
+                if handleEscape() {
+                    return true
+                }
+            }
+            return false
+        }
     }
 }
 
 final class MacNSTextView: NSTextView {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.keyCode == 53 { // ESC key
+            if let coordinator = self.delegate as? MacTextEditor.Coordinator {
+                if coordinator.handleEscape() {
+                    return true
+                }
+            }
+        }
         if event.modifierFlags.contains(.command) {
             let key = event.charactersIgnoringModifiers?.lowercased()
             if key == "a" {
@@ -723,4 +878,28 @@ final class MacNSTextView: NSTextView {
         }
         return super.performKeyEquivalent(with: event)
     }
+
+    override func cancelOperation(_ sender: Any?) {
+        if let coordinator = self.delegate as? MacTextEditor.Coordinator {
+            if coordinator.handleEscape() {
+                return
+            }
+        }
+        super.cancelOperation(sender)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            if let coordinator = self.delegate as? MacTextEditor.Coordinator {
+                if coordinator.handleEscape() {
+                    return
+                }
+            }
+        }
+        super.keyDown(with: event)
+    }
+}
+
+extension Notification.Name {
+    static let focusSearchField = Notification.Name("com.citizen.AbbreviationExpander.focusSearchField")
 }
