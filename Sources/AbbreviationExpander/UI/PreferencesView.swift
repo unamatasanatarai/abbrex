@@ -36,6 +36,7 @@ public struct PreferencesView: View {
         .frame(minWidth: 620, idealWidth: 700, minHeight: 400, idealHeight: 480)
         .onExitCommand {
             cancelCurrentItemIfEmpty()
+            focusSearch()
         }
         .onAppear {
             if selectedItemId == nil {
@@ -189,6 +190,9 @@ public struct PreferencesView: View {
                 },
                 onCancel: {
                     cancelCurrentItemIfEmpty(id: item.id)
+                },
+                onReturnToSearch: {
+                    focusSearch()
                 }
             )
             .id(item.id)
@@ -324,6 +328,7 @@ struct ItemEditorView: View {
     let isNew: Bool
     let onUpdate: (ExpansionPayload) -> Void
     let onCancel: () -> Void
+    let onReturnToSearch: () -> Void
 
     @State private var prefix: String
     @State private var expansion: String
@@ -332,25 +337,27 @@ struct ItemEditorView: View {
         item: ExpansionPayload,
         isNew: Bool,
         onUpdate: @escaping (ExpansionPayload) -> Void,
-        onCancel: @escaping () -> Void = {}
+        onCancel: @escaping () -> Void = {},
+        onReturnToSearch: @escaping () -> Void = {}
     ) {
         self.item = item
         self.isNew = isNew
         self.onUpdate = onUpdate
         self.onCancel = onCancel
+        self.onReturnToSearch = onReturnToSearch
         _prefix = State(initialValue: item.prefix)
         _expansion = State(initialValue: item.expansion)
     }
 
-    private func handleEscapeIfEmpty() -> Bool {
+    private func handleEscape() -> Bool {
         let isBlank = prefix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
                       expansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if isBlank {
             onUpdate(ExpansionPayload(id: item.id, prefix: "", expansion: "", tags: item.tags))
             onCancel()
-            return true
         }
-        return false
+        onReturnToSearch()
+        return true
     }
 
     var body: some View {
@@ -367,7 +374,7 @@ struct ItemEditorView: View {
                     font: .systemFont(ofSize: 14),
                     isMonospaced: true,
                     isAutoFocused: isNew,
-                    onEscape: handleEscapeIfEmpty
+                    onEscape: handleEscape
                 )
                 .frame(height: 22)
 
@@ -382,7 +389,7 @@ struct ItemEditorView: View {
             MacTextEditor(
                 text: $expansion,
                 font: .monospacedSystemFont(ofSize: 13, weight: .regular),
-                onEscape: handleEscapeIfEmpty
+                onEscape: handleEscape
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(NSColor.controlBackgroundColor))

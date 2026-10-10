@@ -299,6 +299,14 @@ public struct CoreTests {
             assert(expansion?.evaluated.text == "be right back", "Evaluated text mismatch")
             assert(sm.state == .idle, "State should be IDLE after expansion")
 
+            // Partial prefix expansion (typing 'b' selects 'brb': prefixLength must be 1, not 3)
+            sm.processCharacter("b")
+            assert(sm.state == .popupActive)
+            let partialExpansion = sm.processSelectionToExpand(index: 0)
+            assert(partialExpansion != nil)
+            assert(partialExpansion?.prefixLength == 1, "Partial prefixLength should be 1 (bounded by buffer count)")
+            assert(sm.state == .idle)
+
             // Expanding when not active returns nil
             assert(sm.processSelectionToExpand() == nil, "Expanding in IDLE state should return nil")
 

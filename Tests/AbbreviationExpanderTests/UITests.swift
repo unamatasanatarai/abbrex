@@ -162,6 +162,18 @@ public struct UITests {
             assert(updatedItem?.prefix == "updated", "editor onUpdate callback failed")
             assert(!wasCancelled, "Initial wasCancelled should be false")
 
+            var returnedToSearch = false
+            let editorWithReturn = ItemEditorView(
+                item: item,
+                isNew: false,
+                onUpdate: { _ in },
+                onCancel: {},
+                onReturnToSearch: { returnedToSearch = true }
+            )
+            _ = editorWithReturn.body
+            editorWithReturn.onReturnToSearch()
+            assert(returnedToSearch, "editor onReturnToSearch callback failed")
+
             // Test SidebarItemRow
             var deletedRow = false
             let row = SidebarItemRow(

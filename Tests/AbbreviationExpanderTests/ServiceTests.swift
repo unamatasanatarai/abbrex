@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import CoreGraphics
+import Carbon
 
 public struct ServiceTests {
     @MainActor
@@ -24,6 +25,15 @@ public struct ServiceTests {
             let replacedIgnored = monitor.handleCGEvent(dummyEvent, type: .keyDown)
             assert(!replacedIgnored, "Keystroke should be ignored when TextReplacer is active")
             TextReplacer.isReplacing = false
+
+            // 2b. Secure Input Gating (passwords, PINs, master keys)
+            sm.processCharacter("b")
+            assert(sm.state == .popupActive, "State should be POPUP_ACTIVE")
+            EnableSecureEventInput()
+            let secureIgnored = monitor.handleCGEvent(dummyEvent, type: .keyDown)
+            assert(!secureIgnored, "Keystroke should return false when secure event input is enabled")
+            assert(sm.state == .idle, "State should be reset to IDLE when secure input is enabled")
+            DisableSecureEventInput()
 
             // 3. Mouse Click Handling (leftMouseDown)
             // Left click when state is idle

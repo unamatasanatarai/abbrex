@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import CoreGraphics
+import Carbon
 
 /// System-wide Event Monitor Service using CGEventTap & NSEvent.
 /// Intercepts keys system-wide across macOS applications.
@@ -106,6 +107,14 @@ public final class EventMonitor {
 
     /// Low-level CGEvent handler. Returns true to consume event system-wide.
     public func handleCGEvent(_ event: CGEvent, type: CGEventType) -> Bool {
+        // 0. Gate out secure input fields (passwords, PINs, master keys)
+        if IsSecureEventInputEnabled() {
+            if stateMachine.state != .idle {
+                stateMachine.reset(state: .idle)
+            }
+            return false
+        }
+
         // DO NOT WATCH KEYSTROKES WHILE REPLACING TEXT!
         if TextReplacer.isReplacing {
             return false

@@ -102,7 +102,8 @@ public final class StateMachine {
         guard targetIndex >= 0 && targetIndex < activeMatches.count else { return nil }
 
         let selectedMatch = activeMatches[targetIndex]
-        let prefixLen = buffer.count
+        // Strictly delete the matched abbreviation prefix length (bounded by buffer count to support partial completions)
+        let prefixLen = min(buffer.count, selectedMatch.prefix.count)
         let evaluated = TemplateEngine.evaluate(template: selectedMatch.expansion, customDate: customDate, customClipboard: customClipboard)
 
         state = .expanded
