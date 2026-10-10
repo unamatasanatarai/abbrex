@@ -79,16 +79,18 @@ public struct UITests {
             vm.startMonitoring()
             vm.reloadTrie()
 
-            // 1. Add Item
+            // 1. Add Item (sorted alphabetically)
             let added = vm.addItem(prefix: "test-p", expansion: "test-e")
-            assert(vm.libraryItems.first?.id == added.id, "Added item should be at index 0")
-            assert(vm.libraryItems.first?.prefix == "test-p", "Added prefix mismatch")
+            assert(vm.libraryItems.contains(where: { $0.id == added.id }), "Added item should be in libraryItems")
+            assert(vm.libraryItems.first(where: { $0.id == added.id })?.prefix == "test-p", "Added prefix mismatch")
+            assert(vm.libraryItems == AppViewModel.sortSnippets(vm.libraryItems), "libraryItems should be sorted alphabetically")
 
             // 2. Update Item
             let updated = ExpansionPayload(id: added.id, prefix: "test-p-up", expansion: "test-e-up", tags: ["tag1"])
             vm.updateItem(updated)
-            assert(vm.libraryItems.first?.prefix == "test-p-up", "Updated prefix mismatch")
-            assert(vm.libraryItems.first?.tags == ["tag1"], "Updated tags mismatch")
+            assert(vm.libraryItems.first(where: { $0.id == added.id })?.prefix == "test-p-up", "Updated prefix mismatch")
+            assert(vm.libraryItems.first(where: { $0.id == added.id })?.tags == ["tag1"], "Updated tags mismatch")
+            assert(vm.libraryItems == AppViewModel.sortSnippets(vm.libraryItems), "libraryItems should remain sorted after update")
 
             // Update non-existent item is a safe no-op
             vm.updateItem(ExpansionPayload(id: "non-existent", prefix: "foo", expansion: "bar"))

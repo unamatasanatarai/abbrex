@@ -38,13 +38,12 @@ public struct CoreTests {
         // MARK: - 2. DefaultLibrary Tests
         testRunner("DefaultLibrary - Built-in Items Content & Tags") {
             let items = DefaultLibrary.defaultItems
-            assert(items.count == 5, "Expected 5 default items, got \(items.count)")
-            assert(items.map(\.prefix) == ["gg", ":shrug", "ty", "eus", ":buu"], "Default prefixes mismatch")
-            assert(items[0].expansion == "good game", "gg expansion mismatch")
+            assert(items.count == 4, "Expected 4 default items, got \(items.count)")
+            assert(items.map(\.prefix) == [":buu", ":shrug", "ty", "wtf"], "Default prefixes mismatch: \(items.map(\.prefix))")
+            assert(items[0].expansion == "brew update ; brew upgrade --no-quarantine --cask --greedy ;brew upgrade --no-quarantine --greedy ; brew cleanup --prune=all -s", ":buu expansion mismatch")
             assert(items[1].expansion == "¯\\_(ツ)_/¯", ":shrug expansion mismatch")
             assert(items[2].expansion == "Thank you!", "ty expansion mismatch")
-            assert(items[3].expansion == "unamatasanatarai@gmail.com", "eus expansion mismatch")
-            assert(items[4].expansion == #"rm -rf "$(brew --cache)" ; brew update ; brew upgrade --no-quarantine --cask --greedy ;brew upgrade --no-quarantine --greedy ; brew cleanup --prune=all -s"#, ":buu expansion mismatch")
+            assert(items[3].expansion == "Well... Shave my legs and paint me blue!", "wtf expansion mismatch")
             for item in items {
                 assert(!item.prefix.isEmpty, "Item prefix cannot be empty")
                 assert(!item.expansion.isEmpty, "Item expansion cannot be empty")

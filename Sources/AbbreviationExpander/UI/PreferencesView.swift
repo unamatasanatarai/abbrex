@@ -314,11 +314,16 @@ public struct PreferencesView: View {
     }
 
     private var filteredItems: [ExpansionPayload] {
-        if searchText.isEmpty { return viewModel.libraryItems }
-        return viewModel.libraryItems.filter {
-            $0.prefix.localizedCaseInsensitiveContains(searchText) ||
-            $0.expansion.localizedCaseInsensitiveContains(searchText)
+        let items: [ExpansionPayload]
+        if searchText.isEmpty {
+            items = viewModel.libraryItems
+        } else {
+            items = viewModel.libraryItems.filter {
+                $0.prefix.localizedCaseInsensitiveContains(searchText) ||
+                $0.expansion.localizedCaseInsensitiveContains(searchText)
+            }
         }
+        return AppViewModel.sortSnippets(items)
     }
 }
 

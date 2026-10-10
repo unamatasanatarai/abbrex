@@ -21,7 +21,7 @@ public final class AppViewModel: ObservableObject {
         self.stateMachine = StateMachine()
         self.eventMonitor = EventMonitor(stateMachine: stateMachine)
         self.eventMonitor?.overlayPanel = self.overlayPanel
-        self.libraryItems = storage.load()
+        self.libraryItems = Self.sortSnippets(storage.load())
 
         setupStateMachine()
         setupOverlayPanel()
@@ -142,10 +142,25 @@ public final class AppViewModel: ObservableObject {
         _ = AXIsProcessTrustedWithOptions(options as CFDictionary)
     }
 
+    public static func sortSnippets(_ items: [ExpansionPayload]) -> [ExpansionPayload] {
+        return items.sorted { a, b in
+            let aEmpty = a.prefix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let bEmpty = b.prefix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if aEmpty && !bEmpty { return true }
+            if !aEmpty && bEmpty { return false }
+            return a.prefix.localizedCaseInsensitiveCompare(b.prefix) == .orderedAscending
+        }
+    }
+
+    public func sortLibraryItems() {
+        self.libraryItems = Self.sortSnippets(libraryItems)
+    }
+
     @discardableResult
     public func addItem(prefix: String, expansion: String) -> ExpansionPayload {
         let newItem = ExpansionPayload(prefix: prefix, expansion: expansion)
-        libraryItems.insert(newItem, at: 0)
+        libraryItems.append(newItem)
+        sortLibraryItems()
         saveLibrary(immediate: true)
         reloadTrie()
         return newItem
@@ -154,6 +169,7 @@ public final class AppViewModel: ObservableObject {
     public func updateItem(_ item: ExpansionPayload) {
         if let idx = libraryItems.firstIndex(where: { $0.id == item.id }) {
             libraryItems[idx] = item
+            sortLibraryItems()
             saveLibrary(immediate: false)
             reloadTrie()
         }
@@ -292,7 +308,7 @@ public final class AppViewModel: ObservableObject {
     }
 
     public func replaceLibrary(with items: [ExpansionPayload]) {
-        self.libraryItems = items
+        self.libraryItems = Self.sortSnippets(items)
         saveLibrary(immediate: true)
         reloadTrie()
     }

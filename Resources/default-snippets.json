@@ -1,27 +1,18 @@
 [
   {
-    "id": "gg",
-    "prefix": "gg",
-    "expansion": "good game"
+    "expansion" : "brew update ; brew upgrade --no-quarantine --cask --greedy ;brew upgrade --no-quarantine --greedy ; brew cleanup --prune=all -s",
+    "prefix" : ":buu"
   },
   {
-    "id": ":shrug",
-    "prefix": ":shrug",
-    "expansion": "¯\\_(ツ)_/¯"
+    "expansion" : "¯\\_(ツ)_/¯",
+    "prefix" : ":shrug"
   },
   {
-    "id": "ty",
-    "prefix": "ty",
-    "expansion": "Thank you!"
+    "expansion" : "Thank you!",
+    "prefix" : "ty"
   },
   {
-    "id": "eus",
-    "prefix": "eus",
-    "expansion": "unamatasanatarai@gmail.com"
-  },
-  {
-    "id": ":buu",
-    "prefix": ":buu",
-    "expansion": "rm -rf \"$(brew --cache)\" ; brew update ; brew upgrade --no-quarantine --cask --greedy ;brew upgrade --no-quarantine --greedy ; brew cleanup --prune=all -s"
+    "expansion" : "Well... Shave my legs and paint me blue!",
+    "prefix" : "wtf"
   }
 ]

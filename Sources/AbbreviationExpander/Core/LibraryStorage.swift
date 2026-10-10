@@ -38,7 +38,7 @@ public final class LibraryStorage {
         do {
             let data = try Data(contentsOf: fileURL)
             let items = try Self.decoder.decode([ExpansionPayload].self, from: data)
-            return items
+            return items.sorted { $0.prefix.localizedCaseInsensitiveCompare($1.prefix) == .orderedAscending }
         } catch {
             print("Warning: Failed to load library from \(fileURL.path): \(error). Falling back to defaults.")
             return AppConfig.defaultSnippets
@@ -47,11 +47,12 @@ public final class LibraryStorage {
 
     /// Saves the current library of abbreviation payloads to disk atomically.
     public func save(items: [ExpansionPayload]) throws {
+        let sorted = items.sorted { $0.prefix.localizedCaseInsensitiveCompare($1.prefix) == .orderedAscending }
         let parentDir = fileURL.deletingLastPathComponent()
         if !fileManager.fileExists(atPath: parentDir.path) {
             try fileManager.createDirectory(at: parentDir, withIntermediateDirectories: true, attributes: nil)
         }
-        let data = try Self.encoder.encode(items)
+        let data = try Self.encoder.encode(sorted)
         try data.write(to: fileURL, options: .atomic)
     }
 
