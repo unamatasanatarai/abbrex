@@ -59,10 +59,19 @@ install: build
 dmg: build
 	@./scripts/build_dmg.sh
 
-## release-dry-run: Preview release tagging and publishing without making remote changes
-release-dry-run:
-	@./scripts/release.sh --dry-run
+# Capture positional version argument for release targets (e.g. make release 1.1.0)
+ifeq ($(firstword $(MAKECMDGOALS)),$(filter $(firstword $(MAKECMDGOALS)),release release-dry-run))
+  RELEASE_TARGET_VERSION := $(word 2,$(MAKECMDGOALS))
+  ifneq ($(RELEASE_TARGET_VERSION),)
+    $(eval $(RELEASE_TARGET_VERSION):;@:)
+  endif
+endif
 
-## release: Build DMG, create & push tag, and publish GitHub Release with DMG attached
+## release-dry-run: Preview release tagging and publishing without making remote changes (e.g. make release-dry-run [version])
+release-dry-run:
+	@./scripts/release.sh --dry-run $(if $(VERSION),$(VERSION),$(RELEASE_TARGET_VERSION))
+
+## release: Bump version (auto or specified: make release [version]), build DMG, tag & push, and publish release
 release:
-	@./scripts/release.sh
+	@./scripts/release.sh $(if $(VERSION),$(VERSION),$(RELEASE_TARGET_VERSION))
+
