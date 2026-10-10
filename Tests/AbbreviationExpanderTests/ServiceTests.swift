@@ -194,5 +194,62 @@ public struct ServiceTests {
                 assert(!monitor.handleNSEvent(nsEvent), "NSEvent fallback should route without crashing")
             }
         }
+
+        testRunner("LaunchAtLoginManager - Plist Generation, Lifecycle & Directory Isolation") {
+            let tempDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("AbbrExLaunchTests_\(UUID().uuidString)", isDirectory: true)
+
+            let testBundleId = "com.citizen.AbbreviationExpander.test"
+            let expectedAppPath = "/Applications/AbbrExTest.app"
+
+            let manager = LaunchAtLoginManager(
+                bundleIdentifier: testBundleId,
+                launchAgentsDirectory: tempDir,
+                appPathResolver: { expectedAppPath }
+            )
+
+            // 1. Initially disabled (no plist in isolated folder)
+            assert(!manager.isEnabled, "Should initially be disabled when plist does not exist")
+            assert(!FileManager.default.fileExists(atPath: manager.plistURL.path), "Plist file should not exist yet")
+
+            // 2. Enable startup
+            let enableResult = manager.setEnabled(true)
+            assert(enableResult, "setEnabled(true) should succeed")
+            assert(manager.isEnabled, "manager.isEnabled should be true after enabling")
+            assert(FileManager.default.fileExists(atPath: manager.plistURL.path), "Plist file should exist after enabling")
+
+            // 3. Inspect generated plist contents
+            let plistData = try Data(contentsOf: manager.plistURL)
+            let plistObj = try PropertyListSerialization.propertyList(from: plistData, format: nil)
+            guard let plistDict = plistObj as? [String: Any] else {
+                fatalError("Plist should deserialize to a dictionary")
+            }
+
+            assert(plistDict["Label"] as? String == testBundleId, "Plist Label should match test bundle ID")
+            assert(plistDict["RunAtLoad"] as? Bool == true, "Plist RunAtLoad should be true")
+            assert(plistDict["ProcessType"] as? String == "Interactive", "Plist ProcessType should be Interactive")
+
+            guard let progArgs = plistDict["ProgramArguments"] as? [String] else {
+                fatalError("ProgramArguments should be array of strings")
+            }
+            assert(progArgs == ["/usr/bin/open", "-a", expectedAppPath], "ProgramArguments mismatch")
+
+            // 4. Test syncWithAppPathIfNeeded
+            manager.syncWithAppPathIfNeeded()
+            assert(manager.isEnabled, "manager should remain enabled after sync")
+
+            // 5. Disable startup
+            let disableResult = manager.setEnabled(false)
+            assert(disableResult, "setEnabled(false) should succeed")
+            assert(!manager.isEnabled, "manager.isEnabled should be false after disabling")
+            assert(!FileManager.default.fileExists(atPath: manager.plistURL.path), "Plist file should be removed after disabling")
+
+            // 6. Test defaultAppPath resolution
+            let resolvedDefault = LaunchAtLoginManager.defaultAppPath
+            assert(!resolvedDefault.isEmpty, "defaultAppPath should return a non-empty string")
+
+            // Clean up temporary test directory
+            try? FileManager.default.removeItem(at: tempDir)
+        }
     }
 }

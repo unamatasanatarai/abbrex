@@ -6,22 +6,35 @@ import UniformTypeIdentifiers
 public final class AppViewModel: ObservableObject {
     @Published public var isAccessibilityGranted: Bool = false
     @Published public var libraryItems: [ExpansionPayload] = []
+    @Published public var isLaunchAtStartupEnabled: Bool = false {
+        didSet {
+            guard !isInitializing, oldValue != isLaunchAtStartupEnabled else { return }
+            _ = launchAtLoginManager.setEnabled(isLaunchAtStartupEnabled)
+        }
+    }
 
     public let stateMachine: StateMachine
     public let overlayPanel = OverlayPanel()
     public var eventMonitor: EventMonitor?
     public let storage: LibraryStorage
+    public let launchAtLoginManager: LaunchAtLoginManaging
 
+    private var isInitializing = true
     private var showDebounceWorkItem: DispatchWorkItem?
     private var saveDebounceWorkItem: DispatchWorkItem?
     private var notificationObservers: [NSObjectProtocol] = []
 
-    public init(storage: LibraryStorage = .shared) {
+    public init(
+        storage: LibraryStorage = .shared,
+        launchAtLoginManager: LaunchAtLoginManaging = LaunchAtLoginManager.shared
+    ) {
         self.storage = storage
+        self.launchAtLoginManager = launchAtLoginManager
         self.stateMachine = StateMachine()
         self.eventMonitor = EventMonitor(stateMachine: stateMachine)
         self.eventMonitor?.overlayPanel = self.overlayPanel
         self.libraryItems = Self.sortSnippets(storage.load())
+        self.isLaunchAtStartupEnabled = launchAtLoginManager.isEnabled
 
         setupStateMachine()
         setupOverlayPanel()
@@ -30,6 +43,8 @@ public final class AppViewModel: ObservableObject {
         startMonitoring()
         setupAppActiveObserver()
         setupTerminationObserver()
+        launchAtLoginManager.syncWithAppPathIfNeeded()
+        self.isInitializing = false
     }
 
     deinit {
@@ -140,6 +155,15 @@ public final class AppViewModel: ObservableObject {
     public func openAccessibilitySettings() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         _ = AXIsProcessTrustedWithOptions(options as CFDictionary)
+    }
+
+    public func setLaunchAtStartup(_ enabled: Bool) {
+        guard isLaunchAtStartupEnabled != enabled else { return }
+        isLaunchAtStartupEnabled = enabled
+    }
+
+    public func toggleLaunchAtStartup() {
+        setLaunchAtStartup(!isLaunchAtStartupEnabled)
     }
 
     public static func sortSnippets(_ items: [ExpansionPayload]) -> [ExpansionPayload] {

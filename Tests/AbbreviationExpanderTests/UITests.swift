@@ -129,6 +129,28 @@ public struct UITests {
             vm.replaceLibrary(with: kvPayloads)
             assert(vm.libraryItems.count == 2, "KV dict import failed")
 
+            // 7. Launch at startup toggling
+            class MockLaunchManager: LaunchAtLoginManaging {
+                var isEnabled: Bool = false
+                func setEnabled(_ enabled: Bool) -> Bool {
+                    self.isEnabled = enabled
+                    return true
+                }
+                func syncWithAppPathIfNeeded() {}
+            }
+
+            let mockLaunch = MockLaunchManager()
+            let vmWithMock = AppViewModel(storage: storage, launchAtLoginManager: mockLaunch)
+            assert(!vmWithMock.isLaunchAtStartupEnabled, "Initial mock launch state should be false")
+
+            vmWithMock.setLaunchAtStartup(true)
+            assert(vmWithMock.isLaunchAtStartupEnabled, "isLaunchAtStartupEnabled should be true")
+            assert(mockLaunch.isEnabled, "MockLaunchManager should have received true")
+
+            vmWithMock.toggleLaunchAtStartup()
+            assert(!vmWithMock.isLaunchAtStartupEnabled, "isLaunchAtStartupEnabled should be false after toggle")
+            assert(!mockLaunch.isEnabled, "MockLaunchManager should have received false")
+
             // Clean up
             try? storage.removeStorageFile()
             try? FileManager.default.removeItem(at: tempDir)
@@ -196,9 +218,11 @@ public struct UITests {
 
             var imported = false
             var exported = false
+            var startupToggled = false
             let actionMenu = ActionMenuButton(
                 onImport: { imported = true },
-                onExport: { exported = true }
+                onExport: { exported = true },
+                isLaunchAtStartupEnabled: Binding(get: { startupToggled }, set: { startupToggled = $0 })
             )
             _ = actionMenu.body
             actionMenu.onImport()

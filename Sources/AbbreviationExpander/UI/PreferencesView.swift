@@ -128,7 +128,8 @@ public struct PreferencesView: View {
 
                 ActionMenuButton(
                     onImport: { viewModel.importLibraryWithOpenPanel() },
-                    onExport: { viewModel.exportLibraryWithSavePanel() }
+                    onExport: { viewModel.exportLibraryWithSavePanel() },
+                    isLaunchAtStartupEnabled: $viewModel.isLaunchAtStartupEnabled
                 )
             }
             .padding(10)
@@ -174,8 +175,38 @@ public struct PreferencesView: View {
                 .background(Color(NSColor.controlBackgroundColor))
                 .transition(.opacity)
             }
+
+            Divider()
+
+            // System startup footer toggle
+            launchAtStartupBar
         }
         .background(Color(NSColor.windowBackgroundColor).opacity(0.5))
+    }
+
+    // MARK: - Startup Toggle Footer Bar
+    private var launchAtStartupBar: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Image(systemName: "power")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(viewModel.isLaunchAtStartupEnabled ? .accentColor : .secondary.opacity(0.8))
+
+            Text("Start on startup")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+
+            Spacer()
+
+            Toggle("", isOn: $viewModel.isLaunchAtStartupEnabled)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+        .help("Automatically start AbbrEx on system startup")
     }
 
     // MARK: - Editor (Isolated detail view to prevent typing cursor jumps)
@@ -511,6 +542,7 @@ struct PlusIconButton: View {
 struct ActionMenuButton: View {
     let onImport: () -> Void
     let onExport: () -> Void
+    var isLaunchAtStartupEnabled: Binding<Bool>? = nil
     @State private var isHovered = false
 
     var body: some View {
@@ -520,6 +552,10 @@ struct ActionMenuButton: View {
             }
             Button(action: onExport) {
                 Label("Export to JSON...", systemImage: "square.and.arrow.up")
+            }
+            if let startupBinding = isLaunchAtStartupEnabled {
+                Divider()
+                Toggle("Start on Startup", isOn: startupBinding)
             }
         } label: {
             Image(systemName: "ellipsis")

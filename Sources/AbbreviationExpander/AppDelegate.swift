@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation {
     public var statusItem: NSStatusItem?
     public var statusMenu: NSMenu?
     public var isShowingMenu = false
@@ -45,6 +45,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         let aboutItem = NSMenuItem(title: "About AbbrEx", action: #selector(openAboutWindow), keyEquivalent: "")
         aboutItem.target = self
         appMenu.addItem(aboutItem)
+
+        appMenu.addItem(NSMenuItem.separator())
+
+        let appStartupItem = NSMenuItem(title: "Start on System Startup", action: #selector(toggleLaunchAtStartupAction), keyEquivalent: "")
+        appStartupItem.target = self
+        appStartupItem.state = (viewModel?.isLaunchAtStartupEnabled == true) ? .on : .off
+        appMenu.addItem(appStartupItem)
 
         appMenu.addItem(NSMenuItem.separator())
 
@@ -113,6 +120,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         openItem.target = self
         menu.addItem(openItem)
 
+        let statusStartupItem = NSMenuItem(title: "Start on System Startup", action: #selector(toggleLaunchAtStartupAction), keyEquivalent: "")
+        statusStartupItem.target = self
+        statusStartupItem.state = (viewModel?.isLaunchAtStartupEnabled == true) ? .on : .off
+        menu.addItem(statusStartupItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let importItem = NSMenuItem(title: "Import Snippets...", action: #selector(importSnippetsAction), keyEquivalent: "")
@@ -149,11 +161,33 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         }
     }
 
+    public func menuWillOpen(_ menu: NSMenu) {
+        let isEnabled = (viewModel?.isLaunchAtStartupEnabled == true)
+        for item in menu.items {
+            if item.action == #selector(toggleLaunchAtStartupAction) {
+                item.state = isEnabled ? .on : .off
+            }
+        }
+    }
+
     public func menuDidClose(_ menu: NSMenu) {
         if menu == statusMenu {
             statusItem?.menu = nil
             isShowingMenu = false
         }
+    }
+
+    public func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleLaunchAtStartupAction) {
+            menuItem.state = (viewModel?.isLaunchAtStartupEnabled == true) ? .on : .off
+            return true
+        }
+        return true
+    }
+
+    @objc public func toggleLaunchAtStartupAction() {
+        guard let vm = viewModel else { return }
+        vm.toggleLaunchAtStartup()
     }
 
     @objc public func importSnippetsAction() {

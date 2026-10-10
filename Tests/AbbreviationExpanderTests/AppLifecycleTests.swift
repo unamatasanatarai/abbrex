@@ -32,10 +32,35 @@ public struct AppLifecycleTests {
             assert(delegate.aboutWindow?.title == "About AbbrEx", "About window title mismatch")
 
             // Open Preferences Window
-            delegate.viewModel = AppViewModel()
+            let vm = AppViewModel()
+            delegate.viewModel = vm
             delegate.openPreferencesWindow()
             assert(delegate.preferencesWindow != nil, "preferencesWindow should be created")
             assert(delegate.preferencesWindow?.title == "AbbrEx", "Preferences window title mismatch")
+
+            // Test Launch at Startup menu items & actions
+            let startupMenuItem = delegate.statusMenu?.items.first(where: {
+                $0.action == #selector(delegate.toggleLaunchAtStartupAction)
+            })
+            assert(startupMenuItem != nil, "Status menu should contain Start on System Startup item")
+            assert(startupMenuItem?.title == "Start on System Startup", "Menu title should match")
+
+            // Test toggling via action
+            let initialStartup = vm.isLaunchAtStartupEnabled
+            delegate.toggleLaunchAtStartupAction()
+            assert(vm.isLaunchAtStartupEnabled == !initialStartup, "toggleLaunchAtStartupAction should toggle VM state")
+
+            // Test menuWillOpen and validateMenuItem synchronization
+            delegate.menuWillOpen(delegate.statusMenu ?? NSMenu())
+            assert(startupMenuItem?.state == (vm.isLaunchAtStartupEnabled ? .on : .off), "menu item state should reflect VM state")
+
+            if let item = startupMenuItem {
+                assert(delegate.validateMenuItem(item), "validateMenuItem should return true for startup item")
+                assert(item.state == (vm.isLaunchAtStartupEnabled ? .on : .off), "validateMenuItem should update item state")
+            }
+
+            // Restore initial state
+            delegate.toggleLaunchAtStartupAction()
 
             // Double-tap Cmd+Q guard:
             // First tap shows HUD prompt
