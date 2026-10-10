@@ -1,36 +1,67 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
 
-echo "=== Building AbbrEx Native macOS Application ==="
-
-SDK_PATH=$(xcrun --show-sdk-path)
-APP_NAME="AbbrEx"
-BUNDLE_ID="com.citizen.AbbreviationExpander"
-if [ -f "VERSION" ]; then
-    VERSION=$(tr -d '[:space:]' <VERSION)
-elif [ -f "../VERSION" ]; then
-    VERSION=$(tr -d '[:space:]' <../VERSION)
-else
-    VERSION="1.0.2"
-fi
-BUILD_DIR="build"
-APP_DIR="$BUILD_DIR/$APP_NAME.app"
-CONTENTS_DIR="$APP_DIR/Contents"
-MACOS_DIR="$CONTENTS_DIR/MacOS"
-RESOURCES_DIR="$CONTENTS_DIR/Resources"
-
-mkdir -p "$MACOS_DIR"
-mkdir -p "$RESOURCES_DIR"
-
-if [ -d "Resources" ]; then
-    cp -R Resources/* "$RESOURCES_DIR/"
-fi
-if [ -f "VERSION" ]; then
-    cp "VERSION" "$RESOURCES_DIR/VERSION"
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/abbrex"
+mkdir -p "$cache_dir"
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Failed to create cache directory ${cache_dir}" >&2
+    exit 1
 fi
 
-echo "1. Compiling Swift source files with Whole-Module-Optimization..."
-swiftc -sdk "$SDK_PATH" \
+sdk_file="${cache_dir}/sdk_path.tmp"
+xcrun --show-sdk-path >"$sdk_file" 2>/dev/null
+if [[ $? -ne 0 || ! -s "$sdk_file" ]]; then
+    rm -f "$sdk_file"
+    printf '%s\n' "Error: Failed to obtain SDK path from xcrun" >&2
+    exit 1
+fi
+
+IFS= read -r sdk_path <"$sdk_file"
+rm -f "$sdk_file"
+
+app_name="AbbrEx"
+bundle_id="com.citizen.AbbreviationExpander"
+
+version=""
+if [[ -f "VERSION" ]]; then
+    IFS= read -r version <"VERSION"
+elif [[ -f "../VERSION" ]]; then
+    IFS= read -r version <"../VERSION"
+fi
+version="${version//[[:space:]]/}"
+if [[ -z "$version" ]]; then
+    version="1.0.2"
+fi
+
+build_dir="build"
+app_dir="${build_dir}/${app_name}.app"
+contents_dir="${app_dir}/Contents"
+macos_dir="${contents_dir}/MacOS"
+resources_dir="${contents_dir}/Resources"
+
+mkdir -p "$macos_dir" "$resources_dir"
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Failed to create application bundle directories" >&2
+    exit 1
+fi
+
+if [[ -d "Resources" ]]; then
+    cp -R Resources/. "${resources_dir}/"
+    if [[ $? -ne 0 ]]; then
+        printf '%s\n' "Error: Failed to copy Resources" >&2
+        exit 1
+    fi
+fi
+
+if [[ -f "VERSION" ]]; then
+    cp "VERSION" "${resources_dir}/VERSION"
+    if [[ $? -ne 0 ]]; then
+        printf '%s\n' "Error: Failed to copy VERSION file" >&2
+        exit 1
+    fi
+fi
+
+printf '%s\n' "Compiling Swift source files with Whole-Module-Optimization..."
+swiftc -sdk "$sdk_path" \
     -O \
     -whole-module-optimization \
     -Xlinker -dead_strip \
@@ -38,48 +69,59 @@ swiftc -sdk "$SDK_PATH" \
     Sources/AbbreviationExpander/UI/*.swift \
     Sources/AbbreviationExpander/Services/*.swift \
     Sources/AbbreviationExpander/*.swift \
-    -o "$MACOS_DIR/AbbrEx"
+    -o "${macos_dir}/AbbrEx"
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Swift compilation failed" >&2
+    exit 1
+fi
 
-echo "2. Generating Info.plist..."
-cat <<EOF >"$CONTENTS_DIR/Info.plist"
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>AbbrEx</string>
-    <key>CFBundleIdentifier</key>
-    <string>$BUNDLE_ID</string>
-    <key>CFBundleName</key>
-    <string>$APP_NAME</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>$VERSION</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon.icns</string>
-    <key>CFBundleIconName</key>
-    <string>AppIcon</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>12.0</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2026. All rights reserved.</string>
-</dict>
-</plist>
-EOF
+printf '%s\n' "Generating Info.plist..."
+printf '%s\n' \
+    '<?xml version="1.0" encoding="UTF-8"?>' \
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+    '<plist version="1.0">' \
+    '<dict>' \
+    '    <key>CFBundleExecutable</key>' \
+    "    <string>${app_name}</string>" \
+    '    <key>CFBundleIdentifier</key>' \
+    "    <string>${bundle_id}</string>" \
+    '    <key>CFBundleName</key>' \
+    "    <string>${app_name}</string>" \
+    '    <key>CFBundlePackageType</key>' \
+    '    <string>APPL</string>' \
+    '    <key>CFBundleShortVersionString</key>' \
+    "    <string>${version}</string>" \
+    '    <key>CFBundleVersion</key>' \
+    '    <string>1</string>' \
+    '    <key>CFBundleIconFile</key>' \
+    '    <string>AppIcon.icns</string>' \
+    '    <key>CFBundleIconName</key>' \
+    '    <string>AppIcon</string>' \
+    '    <key>LSMinimumSystemVersion</key>' \
+    '    <string>12.0</string>' \
+    '    <key>LSUIElement</key>' \
+    '    <true/>' \
+    '    <key>NSHighResolutionCapable</key>' \
+    '    <true/>' \
+    '    <key>NSHumanReadableCopyright</key>' \
+    '    <string>Copyright © 2026. All rights reserved.</string>' \
+    '</dict>' \
+    '</plist>' >"${contents_dir}/Info.plist"
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Failed to write Info.plist" >&2
+    exit 1
+fi
 
-echo "3. Signing application binary with stable designated requirement..."
-codesign --force --deep --sign - --requirements "=designated => identifier \"$BUNDLE_ID\"" "$APP_DIR"
+printf '%s\n' "Signing application binary with stable designated requirement..."
+codesign --force --deep --sign - --requirements "=designated => identifier \"${bundle_id}\"" "$app_dir"
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Code signing failed" >&2
+    exit 1
+fi
 
-echo "4. Refreshing macOS LaunchServices & Icon cache..."
-touch "$APP_DIR"
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f -R "$APP_DIR" 2>/dev/null || true
-qlmanage -r cache 2>/dev/null || true
+printf '%s\n' "Refreshing macOS LaunchServices and Icon cache..."
+touch "$app_dir"
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f -R "$app_dir" >/dev/null 2>&1
+qlmanage -r cache >/dev/null 2>&1
 
-echo "✅ Build complete: $APP_DIR"
+printf '%s\n' "Build complete: ${app_dir}"

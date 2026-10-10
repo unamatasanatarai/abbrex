@@ -1,88 +1,155 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
 
-APP_NAME="AbbrEx"
-if [ -f "VERSION" ]; then
-    VERSION=$(tr -d '[:space:]' <VERSION)
-elif [ -f "../VERSION" ]; then
-    VERSION=$(tr -d '[:space:]' <../VERSION)
-else
-    VERSION="1.0.2"
+app_name="AbbrEx"
+
+version=""
+if [[ -f "VERSION" ]]; then
+    IFS= read -r version <"VERSION"
+elif [[ -f "../VERSION" ]]; then
+    IFS= read -r version <"../VERSION"
 fi
-BUILD_DIR="build"
-APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
-DMG_NAME="AbbrEx-$VERSION.dmg"
-DMG_PATH="$BUILD_DIR/$DMG_NAME"
-TMP_DMG="$BUILD_DIR/tmp_rw.dmg"
+version="${version//[[:space:]]/}"
+if [[ -z "$version" ]]; then
+    version="1.0.2"
+fi
 
-if [ ! -d "$APP_BUNDLE" ]; then
-    echo "==> Application bundle not found. Triggering build..."
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/abbrex"
+mkdir -p "$cache_dir"
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Failed to create cache directory ${cache_dir}" >&2
+    exit 1
+fi
+
+build_dir="build"
+app_bundle="${build_dir}/${app_name}.app"
+dmg_name="AbbrEx-${version}.dmg"
+dmg_path="${build_dir}/${dmg_name}"
+tmp_dmg="${build_dir}/tmp_rw.dmg"
+
+if [[ ! -d "$app_bundle" ]]; then
+    printf '%s\n' "Application bundle not found. Triggering build..."
     ./scripts/build.sh
+    if [[ $? -ne 0 ]]; then
+        printf '%s\n' "Error: Application build failed" >&2
+        exit 1
+    fi
 fi
 
-# Ensure background image exists
-if [ ! -f "Resources/dmg_background.png" ] || [ ! -f "Resources/dmg_background@2x.png" ]; then
-    echo "==> Generating styled DMG background..."
+if [[ ! -f "Resources/dmg_background.png" || ! -f "Resources/dmg_background@2x.png" ]]; then
+    printf '%s\n' "Generating styled DMG background..."
     python3 scripts/generate_dmg_background.py
+    if [[ $? -ne 0 ]]; then
+        printf '%s\n' "Error: Failed to generate DMG background" >&2
+        exit 1
+    fi
 fi
 
-# Unmount any existing mounts of this volume if previously opened
-for mount in $(hdiutil info | grep -E "/Volumes/$APP_NAME( [0-9]+)?$" | awk '{print $NF}'); do
-    hdiutil detach "$mount" -force >/dev/null 2>&1 || true
-done
+hdi_info_file="${cache_dir}/hdiutil_info.tmp"
+hdiutil info >"$hdi_info_file" 2>/dev/null
+if [[ -f "$hdi_info_file" ]]; then
+    while IFS= read -r line; do
+        if [[ "$line" =~ (/Volumes/${app_name}( [0-9]+)?)[[:space:]]*$ ]]; then
+            hdiutil detach "${BASH_REMATCH[1]}" -force >/dev/null 2>&1
+        fi
+    done <"$hdi_info_file"
+    rm -f "$hdi_info_file"
+fi
 
-echo "==> Creating styled DMG installer package..."
-rm -rf "$BUILD_DIR/dmg_root" "$TMP_DMG" "$DMG_PATH"
-mkdir -p "$BUILD_DIR/dmg_root/.background"
+printf '%s\n' "Creating styled DMG installer package..."
+rm -rf "${build_dir}/dmg_root" "$tmp_dmg" "$dmg_path"
+mkdir -p "${build_dir}/dmg_root/.background"
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Failed to create DMG staging directory" >&2
+    exit 1
+fi
 
-# Copy background images (PNG & multi-resolution TIFF)
-cp "Resources/dmg_background.png" "$BUILD_DIR/dmg_root/.background/background.png"
-if [ -f "Resources/dmg_background@2x.png" ]; then
-    tiffutil -cathidpicheck "Resources/dmg_background.png" "Resources/dmg_background@2x.png" -out "$BUILD_DIR/dmg_root/.background/background.tiff" 2>/dev/null || cp "Resources/dmg_background.png" "$BUILD_DIR/dmg_root/.background/background.tiff"
+cp "Resources/dmg_background.png" "${build_dir}/dmg_root/.background/background.png"
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Failed to copy background image" >&2
+    exit 1
+fi
+
+if [[ -f "Resources/dmg_background@2x.png" ]]; then
+    tiffutil -cathidpicheck "Resources/dmg_background.png" "Resources/dmg_background@2x.png" -out "${build_dir}/dmg_root/.background/background.tiff" >/dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        cp "Resources/dmg_background.png" "${build_dir}/dmg_root/.background/background.tiff"
+    fi
 else
-    cp "Resources/dmg_background.png" "$BUILD_DIR/dmg_root/.background/background.tiff"
+    cp "Resources/dmg_background.png" "${build_dir}/dmg_root/.background/background.tiff"
 fi
 
-# Copy App bundle and Applications symlink
-cp -R "$APP_BUNDLE" "$BUILD_DIR/dmg_root/"
-ln -s /Applications "$BUILD_DIR/dmg_root/Applications"
+cp -R "$app_bundle" "${build_dir}/dmg_root/"
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Failed to copy application bundle to DMG staging" >&2
+    exit 1
+fi
 
-# Create temporary read/write disk image
-hdiutil create -volname "$APP_NAME" -srcfolder "$BUILD_DIR/dmg_root" -format UDRW -ov "$TMP_DMG" >/dev/null
+ln -s /Applications "${build_dir}/dmg_root/Applications"
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Failed to create /Applications symlink" >&2
+    exit 1
+fi
 
-# Attach temporary disk image
-ATTACH_OUTPUT=$(hdiutil attach -readwrite -noverify -noautoopen "$TMP_DMG")
-MOUNT_POINT=$(echo "$ATTACH_OUTPUT" | grep "/Volumes/$APP_NAME" | awk '{print $NF}')
+hdiutil create -volname "$app_name" -srcfolder "${build_dir}/dmg_root" -format UDRW -ov "$tmp_dmg" >/dev/null
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Failed to create temporary disk image" >&2
+    exit 1
+fi
 
-if [ -n "$MOUNT_POINT" ]; then
-    # Configure Finder window styling, bounds, icon sizes and layout
-    osascript <<APPLESCRIPT 2>/dev/null || true
-    tell application "Finder"
-        tell disk "$APP_NAME"
-            open
-            set current view of container window to icon view
-            set toolbar visible of container window to false
-            set statusbar visible of container window to false
-            set the bounds of container window to {400, 100, 1060, 520}
-            set theViewOptions to the icon view options of container window
-            set arrangement of theViewOptions to not arranged
-            set icon size of theViewOptions to 128
-            set background picture of theViewOptions to file ".background:background.tiff"
-            set position of item "AbbrEx.app" of container window to {160, 205}
-            set position of item "Applications" of container window to {500, 205}
-            update without registering applications
-            delay 1
-            close
-        end tell
+attach_file="${cache_dir}/hdiutil_attach.tmp"
+hdiutil attach -readwrite -noverify -noautoopen "$tmp_dmg" >"$attach_file" 2>/dev/null
+if [[ $? -ne 0 ]]; then
+    rm -f "$attach_file"
+    printf '%s\n' "Error: Failed to attach temporary disk image" >&2
+    exit 1
+fi
+
+mount_point=""
+while IFS= read -r line; do
+    if [[ "$line" =~ (/Volumes/${app_name}( [0-9]+)?)[[:space:]]*$ ]]; then
+        mount_point="${BASH_REMATCH[1]}"
+        break
+    fi
+done <"$attach_file"
+rm -f "$attach_file"
+
+if [[ -z "$mount_point" || ! -d "$mount_point" ]]; then
+    printf '%s\n' "Error: Failed to identify disk image mount point" >&2
+    exit 1
+fi
+
+osascript <<APPLESCRIPT >/dev/null 2>&1
+tell application "Finder"
+    tell disk "$app_name"
+        open
+        set current view of container window to icon view
+        set toolbar visible of container window to false
+        set statusbar visible of container window to false
+        set the bounds of container window to {400, 100, 1060, 520}
+        set theViewOptions to the icon view options of container window
+        set arrangement of theViewOptions to not arranged
+        set icon size of theViewOptions to 128
+        set background picture of theViewOptions to file ".background:background.tiff"
+        set position of item "AbbrEx.app" of container window to {160, 205}
+        set position of item "Applications" of container window to {500, 205}
+        update without registering applications
+        delay 1
+        close
     end tell
+end tell
 APPLESCRIPT
 
-    sync
-    hdiutil detach "$MOUNT_POINT" >/dev/null 2>&1 || hdiutil detach -force "$MOUNT_POINT" >/dev/null 2>&1 || true
+sync
+hdiutil detach "$mount_point" >/dev/null 2>&1
+if [[ $? -ne 0 ]]; then
+    hdiutil detach -force "$mount_point" >/dev/null 2>&1
 fi
 
-# Convert to final compressed UDZO disk image
-hdiutil convert "$TMP_DMG" -format UDZO -imagekey zlib-level=9 -ov -o "$DMG_PATH" >/dev/null
-rm -rf "$BUILD_DIR/dmg_root" "$TMP_DMG"
+hdiutil convert "$tmp_dmg" -format UDZO -imagekey zlib-level=9 -ov -o "$dmg_path" >/dev/null
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Failed to convert disk image to UDZO format" >&2
+    exit 1
+fi
 
-echo "✅ DMG created successfully at: $DMG_PATH"
+rm -rf "${build_dir}/dmg_root" "$tmp_dmg"
+printf '%s\n' "DMG created successfully at: ${dmg_path}"

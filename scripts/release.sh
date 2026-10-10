@@ -1,164 +1,301 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
 
-APP_NAME="AbbrEx"
-BUNDLE_ID="com.citizen.AbbreviationExpander"
-BUILD_DIR="build"
+app_name="AbbrEx"
+bundle_id="com.citizen.AbbreviationExpander"
+build_dir="build"
 
-DRY_RUN=false
-TARGET_VERSION=""
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/abbrex"
+mkdir -p "$cache_dir"
+if [[ $? -ne 0 ]]; then
+    printf '%s\n' "Error: Failed to create cache directory ${cache_dir}" >&2
+    exit 1
+fi
+
+dry_run=0
+target_version=""
 
 for arg in "$@"; do
     case "$arg" in
     --dry-run)
-        DRY_RUN=true
+        dry_run=1
         ;;
     *)
-        if [ -z "$TARGET_VERSION" ]; then
-            TARGET_VERSION="$arg"
+        if [[ -z "$target_version" ]]; then
+            target_version="$arg"
         fi
         ;;
     esac
 done
 
-# Read current version from VERSION file
-if [ -f "VERSION" ]; then
-    CURRENT_VERSION=$(tr -d '[:space:]' <VERSION)
-elif [ -f "../VERSION" ]; then
-    CURRENT_VERSION=$(tr -d '[:space:]' <../VERSION)
-else
-    CURRENT_VERSION="1.0.0"
+current_version=""
+if [[ -f "VERSION" ]]; then
+    IFS= read -r current_version <"VERSION"
+elif [[ -f "../VERSION" ]]; then
+    IFS= read -r current_version <"../VERSION"
 fi
-ORIGINAL_VERSION="$CURRENT_VERSION"
+current_version="${current_version//[[:space:]]/}"
+if [[ -z "$current_version" ]]; then
+    current_version="1.0.0"
+fi
 
-# Determine NEW_VERSION: manual override or auto-bump
-if [ -n "$TARGET_VERSION" ]; then
-    # Strip optional leading 'v'
-    TARGET_VERSION="${TARGET_VERSION#v}"
-    if ! [[ "$TARGET_VERSION" =~ ^[0-9]+(\.[0-9]+)* ]]; then
-        echo "❌ Error: Invalid version format '$TARGET_VERSION'. Expected format like 1.1.0 or v1.1.0"
+if [[ -n "$target_version" ]]; then
+    target_version="${target_version#v}"
+    if [[ ! "$target_version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+        printf '%s\n' "Error: Invalid version format '${target_version}'. Expected format like 1.1.0" >&2
         exit 1
     fi
-    NEW_VERSION="$TARGET_VERSION"
+    new_version="$target_version"
 
-    # Fail-fast if requested tag already exists
-    if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
-        echo "❌ Error: Git tag 'v$NEW_VERSION' already exists locally!"
-        echo "Please specify a higher version number."
+    git rev-parse "v${new_version}" >/dev/null 2>&1
+    if [[ $? -eq 0 ]]; then
+        printf '%s\n' "Error: Git tag 'v${new_version}' already exists locally" >&2
         exit 1
     fi
-    if git ls-remote --tags origin "refs/tags/v$NEW_VERSION" 2>/dev/null | grep -q "refs/tags/v$NEW_VERSION$"; then
-        echo "❌ Error: Git tag 'v$NEW_VERSION' already exists on remote origin!"
-        echo "Please specify a higher version number."
+
+    remote_file="${cache_dir}/remote_check.tmp"
+    git ls-remote --tags origin "refs/tags/v${new_version}" >"$remote_file" 2>/dev/null
+    remote_check=""
+    if [[ -f "$remote_file" ]]; then
+        IFS= read -r remote_check <"$remote_file"
+        rm -f "$remote_file"
+    fi
+    if [[ -n "$remote_check" ]]; then
+        printf '%s\n' "Error: Git tag 'v${new_version}' already exists on remote origin" >&2
         exit 1
     fi
 else
-    # Auto-bump patch version: X.Y.Z -> X.Y.(Z+1)
-    IFS='.' read -r major minor patch <<<"$CURRENT_VERSION"
+    major="${current_version%%.*}"
+    rest="${current_version#*.}"
+    if [[ "$rest" != "$current_version" && "$rest" =~ \. ]]; then
+        minor="${rest%%.*}"
+        patch="${rest#*.}"
+    elif [[ "$rest" != "$current_version" ]]; then
+        minor="$rest"
+        patch="0"
+    else
+        minor="0"
+        patch="0"
+    fi
+
     if [[ "$patch" =~ ^[0-9]+$ ]]; then
         patch=$((patch + 1))
-        NEW_VERSION="${major}.${minor}.${patch}"
+        new_version="${major}.${minor}.${patch}"
     else
-        NEW_VERSION="${CURRENT_VERSION}.1"
+        new_version="${current_version}.1"
     fi
 
-    # Advance until we find a tag that does not already exist
-    while git rev-parse "v$NEW_VERSION" >/dev/null 2>&1 || git ls-remote --tags origin "refs/tags/v$NEW_VERSION" 2>/dev/null | grep -q "refs/tags/v$NEW_VERSION$"; do
+    tags_file="${cache_dir}/local_tags.tmp"
+    git tag -l >"$tags_file" 2>/dev/null
+    existing_local_tags=""
+    if [[ -f "$tags_file" ]]; then
+        while IFS= read -r line; do
+            existing_local_tags="${existing_local_tags} ${line}"
+        done <"$tags_file"
+        rm -f "$tags_file"
+    fi
+
+    remote_tags_file="${cache_dir}/remote_tags.tmp"
+    git ls-remote --tags origin >"$remote_tags_file" 2>/dev/null
+    existing_remote_tags=""
+    if [[ -f "$remote_tags_file" ]]; then
+        while IFS= read -r line; do
+            existing_remote_tags="${existing_remote_tags} ${line}"
+        done <"$remote_tags_file"
+        rm -f "$remote_tags_file"
+    fi
+
+    while [[ "$existing_local_tags" =~ (^|[[:space:]])v${new_version}($|[[:space:]]) ]] || [[ "$existing_remote_tags" =~ refs/tags/v${new_version}($|[[:space:]]) ]]; do
         patch=$((patch + 1))
-        NEW_VERSION="${major}.${minor}.${patch}"
+        new_version="${major}.${minor}.${patch}"
     done
 fi
 
-VERSION="$NEW_VERSION"
-DMG_NAME="AbbrEx-$VERSION.dmg"
-DMG_PATH="$BUILD_DIR/$DMG_NAME"
+version="$new_version"
+dmg_name="AbbrEx-${version}.dmg"
+dmg_path="${build_dir}/${dmg_name}"
 
-if [ "$DRY_RUN" = true ]; then
-    echo "==> [DRY RUN] Previewing release AbbrEx v$VERSION (bumped from v$CURRENT_VERSION)..."
-    trap 'echo "$ORIGINAL_VERSION" > VERSION' EXIT
-    echo "$VERSION" >VERSION
+if [[ "$dry_run" -eq 1 ]]; then
+    printf '%s\n' "Previewing release AbbrEx v${version} (bumped from v${current_version})"
+    printf '%s\n' "Would run unit test suite (./scripts/test.sh)"
+    printf '%s\n' "Would commit version bump to VERSION and push to branch"
+    printf '%s\n' "Would build styled DMG package (${dmg_path})"
 else
-    echo "==> Releasing AbbrEx v$VERSION (bumped from v$CURRENT_VERSION)..."
-    echo "$VERSION" >VERSION
-fi
+    printf '%s\n' "$version" >"VERSION"
 
-# Run test suite
-echo "==> Executing test suite before release..."
-./scripts/test.sh
+    ./scripts/test.sh
+    if [[ $? -ne 0 ]]; then
+        printf '%s\n' "Error: Test suite execution failed" >&2
+        exit 1
+    fi
 
-if [ "$DRY_RUN" = false ]; then
-    # Commit version bump to repository if changed
-    if git diff --name-only | grep -q "^VERSION$"; then
-        echo "==> Committing version bump to v$VERSION..."
-        git add VERSION
-        git commit -m "chore(release): bump version to v$VERSION"
-        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-        git push origin "$CURRENT_BRANCH"
+    git diff --quiet "VERSION"
+    if [[ $? -ne 0 ]]; then
+        git add "VERSION"
+        git commit -m "chore(release): bump version to v${version}"
+        if [[ $? -ne 0 ]]; then
+            printf '%s\n' "Error: Failed to commit version bump" >&2
+            exit 1
+        fi
+        branch_file="${cache_dir}/current_branch.tmp"
+        git rev-parse --abbrev-ref HEAD >"$branch_file" 2>/dev/null
+        current_branch=""
+        if [[ -f "$branch_file" ]]; then
+            IFS= read -r current_branch <"$branch_file"
+            rm -f "$branch_file"
+        fi
+        if [[ -z "$current_branch" ]]; then
+            printf '%s\n' "Error: Failed to determine current git branch" >&2
+            exit 1
+        fi
+        git push origin "$current_branch"
+        if [[ $? -ne 0 ]]; then
+            printf '%s\n' "Error: Failed to push commit to remote" >&2
+            exit 1
+        fi
+    fi
+
+    ./scripts/build_dmg.sh
+    if [[ $? -ne 0 ]]; then
+        printf '%s\n' "Error: DMG build failed" >&2
+        exit 1
     fi
 fi
 
-# Build DMG package
-echo "==> Building DMG package for v$VERSION..."
-./scripts/build_dmg.sh
-
-# Fallback: If GITHUB_TOKEN environment variable is invalid, unset it to use the local keyring
-if [ -n "$GITHUB_TOKEN" ]; then
-    if ! gh auth status >/dev/null 2>&1; then
+if [[ -n "$GITHUB_TOKEN" ]]; then
+    gh auth status >/dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
         unset GITHUB_TOKEN
     fi
 fi
 
-# Detect previous release tag
-PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v$CURRENT_VERSION")
-
-# Collect commit logs since previous tag
-COMMIT_LOG=""
-if [ -n "$PREV_TAG" ]; then
-    COMMIT_LOG=$(git log "$PREV_TAG..HEAD" --pretty=format:"* %s (%h)" 2>/dev/null || true)
+prev_tag=""
+git rev-parse "v${current_version}" >/dev/null 2>&1
+if [[ $? -eq 0 ]]; then
+    prev_tag="v${current_version}"
+else
+    prev_tag_file="${cache_dir}/prev_tag.tmp"
+    git describe --tags --abbrev=0 >"$prev_tag_file" 2>/dev/null
+    if [[ -f "$prev_tag_file" ]]; then
+        IFS= read -r prev_tag <"$prev_tag_file"
+        rm -f "$prev_tag_file"
+    fi
 fi
 
-# Build detailed release notes listing all changes since previous release
-RELEASE_NOTES=$(
-    cat <<EOF
-## AbbrEx v$VERSION
+commit_log_target=""
+if [[ -n "$prev_tag" ]]; then
+    commit_log_target="${prev_tag}..HEAD"
+fi
 
-### 🚀 Highlights & Improvements
-* **Razor-Sharp Status Bar Icon**: Dynamically rendered via CoreGraphics vector paths, eliminating Retina display scaling blur.
-* **Enhanced Replacement & Security**: Thread-safe replacement flag, background keystroke simulation, and automatic gating for macOS secure input fields (passwords, PINs).
-* **Snippet Organization**: Automatic alphabetical sorting by prefix throughout library storage, view models, and preferences search.
-* **Updated Defaults & Bundling**: Streamlined default snippets bundled in \`Resources/default-snippets.json\`.
-
-### 📝 Commits Since $PREV_TAG
-$COMMIT_LOG
-
----
-*Built with native Swift for macOS 12.0+.*
-EOF
-)
-
-if [ "$DRY_RUN" = true ]; then
-    echo "=================================================================="
-    echo "  RELEASE DRY RUN PREVIEW (No remote changes will be made)"
-    echo "=================================================================="
-    echo "  • Version to release : v$VERSION (bumped from v$CURRENT_VERSION)"
-    echo "  • Tag to create      : v$VERSION"
-    echo "  • DMG Package        : $DMG_PATH"
-    echo "  • Target Bundle      : $BUNDLE_ID"
-    echo "  • Release Notes      :"
-    echo "------------------------------------------------------------------"
-    echo "$RELEASE_NOTES"
-    echo "------------------------------------------------------------------"
-    echo "  • Command line       : gh release create v$VERSION '$DMG_PATH' --title '$APP_NAME v$VERSION' --notes <notes>"
-    echo "=================================================================="
+log_file="${cache_dir}/git_log.tmp"
+if [[ -n "$commit_log_target" ]]; then
+    git log "$commit_log_target" --pretty=format:"%s (%h)" >"$log_file" 2>/dev/null
 else
-    echo "==> Tagging release v$VERSION..."
-    git tag -a "v$VERSION" -m "Release $APP_NAME v$VERSION"
-    git push origin "v$VERSION"
-    echo "==> Publishing GitHub Release..."
-    if command -v gh >/dev/null 2>&1; then
-        gh release create "v$VERSION" "$DMG_PATH" --title "$APP_NAME v$VERSION" --notes "$RELEASE_NOTES"
-    else
-        echo "Warning: GitHub CLI (gh) not found. Created DMG at $DMG_PATH and tag v$VERSION."
+    git log --pretty=format:"%s (%h)" >"$log_file" 2>/dev/null
+fi
+
+commit_lines=()
+if [[ -f "$log_file" ]]; then
+    mapfile -t commit_lines <"$log_file"
+    rm -f "$log_file"
+fi
+
+features=""
+fixes=""
+other=""
+
+for line in "${commit_lines[@]}"; do
+    if [[ -z "$line" || "$line" =~ ^chore\(release\):\ bump\ version ]]; then
+        continue
     fi
-    echo "✅ Release v$VERSION published successfully!"
+    if [[ "$line" =~ ^feat(\([^\)]+\))?:\ (.*)\ \(([a-f0-9]+)\)$ ]]; then
+        scope="${BASH_REMATCH[1]}"
+        msg="${BASH_REMATCH[2]}"
+        hash="${BASH_REMATCH[3]}"
+        if [[ -n "$scope" ]]; then
+            scope_clean="${scope#\(}"
+            scope_clean="${scope_clean%\)}"
+            features="${features}* **${scope_clean}**: ${msg} (${hash})"$'\n'
+        else
+            features="${features}* ${msg} (${hash})"$'\n'
+        fi
+    elif [[ "$line" =~ ^fix(\([^\)]+\))?:\ (.*)\ \(([a-f0-9]+)\)$ ]]; then
+        scope="${BASH_REMATCH[1]}"
+        msg="${BASH_REMATCH[2]}"
+        hash="${BASH_REMATCH[3]}"
+        if [[ -n "$scope" ]]; then
+            scope_clean="${scope#\(}"
+            scope_clean="${scope_clean%\)}"
+            fixes="${fixes}* **${scope_clean}**: ${msg} (${hash})"$'\n'
+        else
+            fixes="${fixes}* ${msg} (${hash})"$'\n'
+        fi
+    else
+        other="${other}* ${line}"$'\n'
+    fi
+done
+
+release_notes="## AbbrEx v${version}"$'\n'
+
+if [[ -n "$features" ]]; then
+    release_notes="${release_notes}"$'\n'"### Features & Enhancements"$'\n'"${features}"
+fi
+
+if [[ -n "$fixes" ]]; then
+    release_notes="${release_notes}"$'\n'"### Bug Fixes"$'\n'"${fixes}"
+fi
+
+if [[ -n "$other" ]]; then
+    release_notes="${release_notes}"$'\n'"### Other Changes"$'\n'"${other}"
+fi
+
+if [[ -z "$features" && -z "$fixes" && -z "$other" ]]; then
+    if [[ ${#commit_lines[@]} -gt 0 ]]; then
+        release_notes="${release_notes}"$'\n'"### Commits"$'\n'
+        for line in "${commit_lines[@]}"; do
+            release_notes="${release_notes}* ${line}"$'\n'
+        done
+    else
+        release_notes="${release_notes}"$'\n'"Maintenance release."$'\n'
+    fi
+fi
+
+if [[ -n "$prev_tag" ]]; then
+    release_notes="${release_notes}"$'\n'"---"$'\n'"Diff compared to ${prev_tag}. Built with native Swift for macOS 12.0+."
+else
+    release_notes="${release_notes}"$'\n'"---"$'\n'"Built with native Swift for macOS 12.0+."
+fi
+
+if [[ "$dry_run" -eq 1 ]]; then
+    printf '%s\n' "Release dry run preview:"
+    printf '%s\n' "Version to release: v${version} (bumped from v${current_version})"
+    printf '%s\n' "Tag to create: v${version}"
+    printf '%s\n' "DMG Package: ${dmg_path} (would be built)"
+    printf '%s\n' "Target Bundle: ${bundle_id}"
+    printf '%s\n' "Release Notes:"
+    printf '%s\n' "$release_notes"
+    printf '%s\n' "Command line: gh release create v${version} '${dmg_path}' --title '${app_name} v${version}' --notes <notes>"
+else
+    git tag -a "v${version}" -m "Release ${app_name} v${version}"
+    if [[ $? -ne 0 ]]; then
+        printf '%s\n' "Error: Failed to create git tag" >&2
+        exit 1
+    fi
+
+    git push origin "v${version}"
+    if [[ $? -ne 0 ]]; then
+        printf '%s\n' "Error: Failed to push git tag to origin" >&2
+        exit 1
+    fi
+
+    if command -v gh >/dev/null 2>&1; then
+        gh release create "v${version}" "${dmg_path}" --title "${app_name} v${version}" --notes "$release_notes"
+        if [[ $? -ne 0 ]]; then
+            printf '%s\n' "Error: Failed to create GitHub release via gh" >&2
+            exit 1
+        fi
+    else
+        printf '%s\n' "Warning: GitHub CLI (gh) not found. Created DMG at ${dmg_path} and tag v${version}." >&2
+    fi
+
+    printf '%s\n' "Release v${version} published successfully"
 fi
