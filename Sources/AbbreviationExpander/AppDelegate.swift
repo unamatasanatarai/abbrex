@@ -123,6 +123,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         exportItem.target = self
         menu.addItem(exportItem)
 
+        let restoreItem = NSMenuItem(title: "Restore Default Snippets", action: #selector(restoreDefaultSnippetsAction), keyEquivalent: "")
+        restoreItem.target = self
+        menu.addItem(restoreItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let quitItem = NSMenuItem(title: "Quit", action: #selector(handleQuitMenuAction(_:)), keyEquivalent: "q")
@@ -164,6 +168,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     @objc public func exportSnippetsAction() {
         openPreferencesWindow()
         viewModel?.exportLibraryWithSavePanel(targetWindow: preferencesWindow)
+    }
+
+    @objc public func restoreDefaultSnippetsAction() {
+        viewModel?.resetToDefaultSnippets()
     }
 
     public func getStatusBarIcon() -> NSImage {
