@@ -169,8 +169,8 @@ def generate_icons():
         a = a.point(lambda p: min(255, int(p * 1.12)) if p > 20 else 0)
         return Image.merge("RGBA", (r, g, b, a))
 
-    sb_18 = render_crisp_statusbar(18, 15.5)
-    sb_36 = render_crisp_statusbar(36, 31.0)
+    sb_18 = render_crisp_statusbar(18, 16.84)
+    sb_36 = render_crisp_statusbar(36, 33.68)
 
     sb_18.save(os.path.join(resources_dir, "status-bar-icon.png"))
     sb_18.save(os.path.join(resources_dir, "StatusBarIcon.png"))

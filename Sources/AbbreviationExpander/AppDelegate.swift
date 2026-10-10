@@ -167,34 +167,48 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     }
 
     public func getStatusBarIcon() -> NSImage {
-        let bundle = Bundle.main
-        let candidateNames = ["status-bar-icon", "status-bar-iconTemplate", "StatusBarIcon", "StatusBarIconTemplate"]
+        let size = NSSize(width: 18, height: 18)
+        let icon = NSImage(size: size, flipped: false) { rect in
+            // Target height of 12.0 pt preserves optical balance matching macOS menu bar standard
+            let targetH: CGFloat = 12.0
+            let targetW: CGFloat = targetH / (476.0 / 668.0)
+            let startX: CGFloat = (rect.width - targetW) / 2.0
+            let startY: CGFloat = (rect.height - targetH) / 2.0
 
-        for name in candidateNames {
-            if let url = bundle.url(forResource: name, withExtension: "png"),
-               let image = NSImage(contentsOf: url) {
-                image.size = NSSize(width: 18, height: 18)
-                image.isTemplate = true
-                return image
+            func mapPoint(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
+                let nx = (x - 11.0) / 668.0
+                let ny = (y - 94.0) / 476.0
+                let px = startX + nx * targetW
+                let py = startY + (1.0 - ny) * targetH
+                return NSPoint(x: px, y: py)
             }
-            if let image = bundle.image(forResource: name) {
-                image.size = NSSize(width: 18, height: 18)
-                image.isTemplate = true
-                return image
-            }
+
+            let path1 = NSBezierPath()
+            path1.move(to: mapPoint(339, 94))
+            path1.line(to: mapPoint(471, 226))
+            path1.line(to: mapPoint(471, 347))
+            path1.line(to: mapPoint(339, 215))
+            path1.line(to: mapPoint(131, 423))
+            path1.line(to: mapPoint(11, 423))
+            path1.close()
+
+            let path2 = NSBezierPath()
+            path2.move(to: mapPoint(679, 241))
+            path2.line(to: mapPoint(679, 362))
+            path2.line(to: mapPoint(471, 570))
+            path2.line(to: mapPoint(339, 438))
+            path2.line(to: mapPoint(339, 317))
+            path2.line(to: mapPoint(471, 449))
+            path2.close()
+
+            NSColor.black.setFill()
+            path1.fill()
+            path2.fill()
+
+            return true
         }
-
-        for relPath in ["Resources/status-bar-icon.png", "Resources/StatusBarIcon.png"] {
-            if let image = NSImage(contentsOfFile: relPath) {
-                image.size = NSSize(width: 18, height: 18)
-                image.isTemplate = true
-                return image
-            }
-        }
-
-        let fallback = NSImage(size: NSSize(width: 18, height: 18))
-        fallback.isTemplate = true
-        return fallback
+        icon.isTemplate = true
+        return icon
     }
 
     @objc public func openPreferencesWindow() {
