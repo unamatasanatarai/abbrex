@@ -1,0 +1,27 @@
+[
+  {
+    "id": "gg",
+    "prefix": "gg",
+    "expansion": "good game"
+  },
+  {
+    "id": ":shrug",
+    "prefix": ":shrug",
+    "expansion": "¯\\_(ツ)_/¯"
+  },
+  {
+    "id": "ty",
+    "prefix": "ty",
+    "expansion": "Thank you!"
+  },
+  {
+    "id": "eus",
+    "prefix": "eus",
+    "expansion": "unamatasanatarai@gmail.com"
+  },
+  {
+    "id": ":buu",
+    "prefix": ":buu",
+    "expansion": "rm -rf \"$(brew --cache)\" ; brew update ; brew upgrade --no-quarantine --cask --greedy ;brew upgrade --no-quarantine --greedy ; brew cleanup --prune=all -s"
+  }
+]
