@@ -104,6 +104,41 @@ public struct ServiceTests {
             enterEvent.flags = []
             assert(!monitor.handleCGEvent(enterEvent, type: .keyDown), "Enter on idle should return false")
 
+            // Enter on active popup WITHOUT prior arrow navigation:
+            // Must NOT apply expansion, must return false, and reset state to IDLE
+            sm.reset(state: .idle)
+            sm.processCharacter("b")
+            sm.processCharacter("r")
+            sm.processCharacter("b")
+            assert(sm.state == .popupActive)
+            assert(!sm.isSelectionForced, "Selection should not be forced initially")
+            let initialReplacedCount = replacedItems.count
+
+            let unforcedEnterConsumed = monitor.handleCGEvent(enterEvent, type: .keyDown)
+            assert(!unforcedEnterConsumed, "Enter without prior arrow navigation should return false (not expand)")
+            assert(sm.state == .idle, "State should be IDLE after unforced Enter")
+            assert(replacedItems.count == initialReplacedCount, "Unforced Enter must not trigger onReplace")
+
+            // Enter on active popup WITH prior arrow navigation (even for 1 match):
+            // MUST apply expansion, return true, and consume the event
+            sm.reset(state: .idle)
+            sm.processCharacter("b")
+            sm.processCharacter("r")
+            sm.processCharacter("b")
+            assert(sm.state == .popupActive)
+
+            let downNavEvent = CGEvent(keyboardEventSource: nil, virtualKey: 0x7D, keyDown: true)!
+            downNavEvent.flags = []
+            assert(monitor.handleCGEvent(downNavEvent, type: .keyDown), "Down arrow should consume event")
+            assert(sm.isSelectionForced, "isSelectionForced should be true after Down arrow")
+            assert(sm.selectedIndex == 0, "selectedIndex should be 0")
+
+            let forcedEnterConsumed = monitor.handleCGEvent(enterEvent, type: .keyDown)
+            assert(forcedEnterConsumed, "Enter after arrow navigation MUST expand and consume event (return true)")
+            assert(sm.state == .idle, "State should be IDLE after forced Enter expansion")
+            assert(replacedItems.count == initialReplacedCount + 1, "Forced Enter must trigger onReplace")
+            assert(replacedItems.last?.text == "be right back", "Replacement text should match")
+
             // 8. Arrow Keys Navigation: Up (0x7E) & Down (0x7D)
             sm.reset(state: .idle)
             sm.processCharacter("b")
@@ -169,9 +204,9 @@ public struct ServiceTests {
             ctrlL.flags = .maskControl
             assert(monitor.handleCGEvent(ctrlL, type: .keyDown), "Ctrl+l should consume and expand")
             assert(sm.state == .idle, "State should be IDLE after Ctrl+l expansion")
-            assert(replacedItems.count == 2, "Ctrl+l should trigger onReplace")
-            assert(replacedItems[1].prefixLength == 1, "Prefix length should be 1 (bounded by buffer count)")
-            assert(replacedItems[1].text == "be right back", "Replacement text should match")
+            assert(replacedItems.count == 3, "Ctrl+l should trigger onReplace")
+            assert(replacedItems.last?.prefixLength == 1, "Prefix length should be 1 (bounded by buffer count)")
+            assert(replacedItems.last?.text == "be right back", "Replacement text should match")
 
             // Other Ctrl key when idle
             let otherCtrl = CGEvent(keyboardEventSource: nil, virtualKey: 0x00, keyDown: true)!

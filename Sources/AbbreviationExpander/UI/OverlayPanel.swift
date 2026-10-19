@@ -34,7 +34,7 @@ public final class OverlayPanel: NSPanel {
     }
 
     /// Shows overlay popup positioned relative to screen caret coordinates.
-    public func show(matches: [ExpansionPayload], selectedIndex: Int, caretRect: CaretTracker.CaretRect) {
+    public func show(matches: [ExpansionPayload], selectedIndex: Int?, caretRect: CaretTracker.CaretRect) {
         // Zero-allocation reactive update to existing view graph
         candidateViewModel.matches = matches
         candidateViewModel.selectedIndex = selectedIndex

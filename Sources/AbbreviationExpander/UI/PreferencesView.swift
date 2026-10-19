@@ -129,7 +129,8 @@ public struct PreferencesView: View {
                 ActionMenuButton(
                     onImport: { viewModel.importLibraryWithOpenPanel() },
                     onExport: { viewModel.exportLibraryWithSavePanel() },
-                    isLaunchAtStartupEnabled: $viewModel.isLaunchAtStartupEnabled
+                    isLaunchAtStartupEnabled: $viewModel.isLaunchAtStartupEnabled,
+                    popupDelayMs: $viewModel.popupDelayMs
                 )
             }
             .padding(10)
@@ -178,10 +179,69 @@ public struct PreferencesView: View {
 
             Divider()
 
-            // System startup footer toggle
-            launchAtStartupBar
+            // System settings footer (Timeout & Launch at Startup)
+            VStack(spacing: 0) {
+                timeoutSettingBar
+
+                Divider()
+
+                launchAtStartupBar
+            }
         }
         .background(Color(NSColor.windowBackgroundColor).opacity(0.5))
+    }
+
+    // MARK: - Timeout Setting Footer Bar
+    private var timeoutSettingBar: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Image(systemName: "timer")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary.opacity(0.8))
+
+            Text("Timeout")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+
+            Spacer()
+
+            Menu {
+                ForEach([0, 100, 200, 300, 400, 500, 600, 800, 1000], id: \.self) { ms in
+                    Button(action: { viewModel.popupDelayMs = Double(ms) }) {
+                        if Int(viewModel.popupDelayMs) == ms {
+                            Text("✓ \(ms)ms" + (Double(ms) == AppConfig.defaultPopupDelayMs ? " (Default)" : ""))
+                        } else {
+                            Text("\(ms)ms" + (Double(ms) == AppConfig.defaultPopupDelayMs ? " (Default)" : ""))
+                        }
+                    }
+                }
+            } label: {
+                Text("\(Int(viewModel.popupDelayMs))ms")
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
+                    .cornerRadius(4)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Click to select preset suggestion timeout")
+
+            Stepper(
+                "",
+                value: $viewModel.popupDelayMs,
+                in: 0...2000,
+                step: 50
+            )
+            .labelsHidden()
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+        .help("Delay in milliseconds before candidate suggestions popout appears (default: \(Int(AppConfig.defaultPopupDelayMs))ms)")
     }
 
     // MARK: - Startup Toggle Footer Bar
@@ -543,6 +603,7 @@ struct ActionMenuButton: View {
     let onImport: () -> Void
     let onExport: () -> Void
     var isLaunchAtStartupEnabled: Binding<Bool>? = nil
+    var popupDelayMs: Binding<Double>? = nil
     @State private var isHovered = false
 
     var body: some View {
@@ -556,6 +617,20 @@ struct ActionMenuButton: View {
             if let startupBinding = isLaunchAtStartupEnabled {
                 Divider()
                 Toggle("Start on Startup", isOn: startupBinding)
+            }
+            if let delayBinding = popupDelayMs {
+                Divider()
+                Menu("Suggestion Timeout (\(Int(delayBinding.wrappedValue))ms)") {
+                    ForEach([0, 100, 200, 300, 400, 500, 600, 800, 1000], id: \.self) { ms in
+                        Button(action: { delayBinding.wrappedValue = Double(ms) }) {
+                            if Int(delayBinding.wrappedValue) == ms {
+                                Text("✓ \(ms)ms" + (Double(ms) == AppConfig.defaultPopupDelayMs ? " (Default)" : ""))
+                            } else {
+                                Text("\(ms)ms" + (Double(ms) == AppConfig.defaultPopupDelayMs ? " (Default)" : ""))
+                            }
+                        }
+                    }
+                }
             }
         } label: {
             Image(systemName: "ellipsis")

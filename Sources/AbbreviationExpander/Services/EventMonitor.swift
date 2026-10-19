@@ -181,9 +181,22 @@ public final class EventMonitor {
         }
 
         // 4. Accept Expansion with Tab (0x30) or Return/Enter (0x24 / 0x4C)
-        if keyCode == 0x30 || keyCode == 0x24 || keyCode == 0x4C {
+        let isTab = (keyCode == 0x30)
+        let isEnter = (keyCode == 0x24 || keyCode == 0x4C)
+
+        if isTab || isEnter {
             if stateMachine.state == .popupActive {
-                if let expansionResult = stateMachine.processSelectionToExpand() {
+                if isEnter && !stateMachine.isSelectionForced {
+                    // Enter key pressed WITHOUT prior arrow navigation: do NOT expand!
+                    // Reset state and pass Enter key through to application
+                    stateMachine.reset(state: .idle)
+                    return false
+                }
+
+                // If Tab is pressed without explicit selection, default to the first candidate (index 0).
+                // If Enter is pressed, isSelectionForced is guaranteed true, so targetIndex is selectedIndex.
+                let targetIndex: Int = stateMachine.selectedIndex ?? 0
+                if let expansionResult = stateMachine.processSelectionToExpand(index: targetIndex) {
                     executeReplacement(prefixLength: expansionResult.prefixLength, evaluated: expansionResult.evaluated)
                     return true // Consume Tab / Enter event system-wide!
                 }
@@ -242,7 +255,8 @@ public final class EventMonitor {
                     stateMachine.navigateSelection(direction: .up)
                     return true
                 } else if keyCode == 0x25 { // l -> Expand
-                    if let expansionResult = stateMachine.processSelectionToExpand() {
+                    let targetIndex = stateMachine.selectedIndex ?? 0
+                    if let expansionResult = stateMachine.processSelectionToExpand(index: targetIndex) {
                         executeReplacement(prefixLength: expansionResult.prefixLength, evaluated: expansionResult.evaluated)
                         return true
                     }

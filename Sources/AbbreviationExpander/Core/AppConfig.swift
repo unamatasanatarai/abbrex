@@ -6,8 +6,29 @@ public struct AppConfig {
 
     // MARK: - UI & Overlay Popout Settings
 
-    /// Delay in milliseconds before displaying candidate suggestions popout window (e.be right back0ms).
-    public static var popupDelayMs: Double = 200.0
+    /// Default delay in milliseconds before displaying candidate suggestions popout window (300ms).
+    public static let defaultPopupDelayMs: Double = 300.0
+
+    private static let popupDelayKey = "AppConfig.popupDelayMs"
+    public static var userDefaults: UserDefaults = .standard
+
+    /// Delay in milliseconds before displaying candidate suggestions popout window.
+    public static var popupDelayMs: Double {
+        get {
+            if userDefaults.object(forKey: popupDelayKey) != nil {
+                return userDefaults.double(forKey: popupDelayKey)
+            }
+            return defaultPopupDelayMs
+        }
+        set {
+            userDefaults.set(newValue, forKey: popupDelayKey)
+        }
+    }
+
+    /// Resets the popup delay setting to its default value (300ms).
+    public static func resetPopupDelayToDefault() {
+        userDefaults.removeObject(forKey: popupDelayKey)
+    }
 
     /// Default width of the floating overlay candidate panel.
     public static var popupWidth: CGFloat = 240.0

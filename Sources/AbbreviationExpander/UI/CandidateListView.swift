@@ -4,9 +4,9 @@ import AppKit
 /// Observable View Model backing CandidateListView for zero-allocation updates.
 public final class CandidateViewModel: ObservableObject {
     @Published public var matches: [ExpansionPayload] = []
-    @Published public var selectedIndex: Int = 0
+    @Published public var selectedIndex: Int? = nil
 
-    public init(matches: [ExpansionPayload] = [], selectedIndex: Int = 0) {
+    public init(matches: [ExpansionPayload] = [], selectedIndex: Int? = nil) {
         self.matches = matches
         self.selectedIndex = selectedIndex
     }
@@ -29,7 +29,7 @@ public struct CandidateListView: View {
                     ForEach(Array(viewModel.matches.enumerated()), id: \.element.id) { index, match in
                         CandidateRow(
                             match: match,
-                            isSelected: index == viewModel.selectedIndex
+                            isSelected: viewModel.selectedIndex != nil && index == viewModel.selectedIndex
                         ) {
                             onSelectCandidate?(index)
                         }
@@ -39,7 +39,7 @@ public struct CandidateListView: View {
                 .padding(3)
             }
             .onChange(of: viewModel.selectedIndex) { newIndex in
-                if newIndex >= 0 && newIndex < viewModel.matches.count {
+                if let newIndex = newIndex, newIndex >= 0 && newIndex < viewModel.matches.count {
                     withAnimation(.easeInOut(duration: 0.1)) {
                         proxy.scrollTo(viewModel.matches[newIndex].id, anchor: .center)
                     }

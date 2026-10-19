@@ -9,10 +9,14 @@ public struct CoreTests {
 
         // MARK: - 1. AppConfig Tests
         testRunner("AppConfig - Properties and Defaults") {
-            let initialDelay = AppConfig.popupDelayMs
+            AppConfig.resetPopupDelayToDefault()
+            assert(AppConfig.defaultPopupDelayMs == 300.0, "defaultPopupDelayMs mismatch: expected 300.0, got \(AppConfig.defaultPopupDelayMs)")
+            assert(AppConfig.popupDelayMs == 300.0, "default popupDelayMs mismatch: expected 300.0, got \(AppConfig.popupDelayMs)")
+
             AppConfig.popupDelayMs = 250.0
             assert(AppConfig.popupDelayMs == 250.0, "popupDelayMs setter failed")
-            AppConfig.popupDelayMs = initialDelay
+            AppConfig.resetPopupDelayToDefault()
+            assert(AppConfig.popupDelayMs == 300.0, "resetPopupDelayToDefault failed")
 
             let initialWidth = AppConfig.popupWidth
             AppConfig.popupWidth = 300.0
@@ -219,7 +223,7 @@ public struct CoreTests {
 
             let sm = StateMachine(trie: trie)
 
-            var stateNotifications: [(EngineState, [ExpansionPayload], Int)] = []
+            var stateNotifications: [(EngineState, [ExpansionPayload], Int?)] = []
             sm.onStateChanged = { state, matches, idx in
                 stateNotifications.append((state, matches, idx))
             }
@@ -242,8 +246,13 @@ public struct CoreTests {
             assert(sm.activeMatches.count == 2, "Expected 2 active matches for 'b'")
 
             // Navigation down & up
+            assert(sm.selectedIndex == nil, "Initial selectedIndex should be nil")
+            assert(!sm.isSelectionForced, "Selection should not be forced initially")
             sm.navigateSelection(direction: .down)
-            assert(sm.selectedIndex == 1, "Selected index should be 1")
+            assert(sm.selectedIndex == 0, "Selected index should be 0 on first down navigation")
+            assert(sm.isSelectionForced, "Selection should be forced after navigation")
+            sm.navigateSelection(direction: .down)
+            assert(sm.selectedIndex == 1, "Selected index should be 1 on second down navigation")
             sm.navigateSelection(direction: .down)
             assert(sm.selectedIndex == 0, "Selected index should wrap to 0")
             sm.navigateSelection(direction: .up)
@@ -287,6 +296,17 @@ public struct CoreTests {
             assert(sm.state == .popupActive, "State should be POPUP_ACTIVE")
             assert(sm.activeMatches.count == 1, "Expected 1 match for 'brb'")
 
+            assert(sm.selectedIndex == nil, "Selection should not be forced initially even for 1 match")
+            assert(!sm.isSelectionForced, "isSelectionForced should be false before arrow navigation")
+
+            // Expanding without forced selection returns nil
+            assert(sm.processSelectionToExpand() == nil, "Expanding without forced selection should return nil")
+
+            // Move arrow down to force selection on the single option
+            sm.navigateSelection(direction: .down)
+            assert(sm.selectedIndex == 0, "Selected index should be 0 after arrow navigation")
+            assert(sm.isSelectionForced, "isSelectionForced should be true after arrow navigation")
+
             // Expand out of bounds index returns nil
             assert(sm.processSelectionToExpand(index: 99) == nil, "Out of bounds index should return nil")
             assert(sm.processSelectionToExpand(index: -1) == nil, "Negative index should return nil")
@@ -312,7 +332,7 @@ public struct CoreTests {
 
             // Navigate when not active does nothing
             sm.navigateSelection(direction: .down)
-            assert(sm.selectedIndex == 0, "Navigation should be no-op when IDLE")
+            assert(sm.selectedIndex == nil, "Navigation should be no-op when IDLE")
 
             // Cancel
             sm.processCharacter("b")

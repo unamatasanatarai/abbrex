@@ -15,6 +15,9 @@ public struct UITests {
             assert(vm.matches.count == 2, "CandidateViewModel matches count mismatch")
             assert(vm.selectedIndex == 0, "CandidateViewModel selectedIndex mismatch")
 
+            let vmUnforced = CandidateViewModel(matches: [p1, p2])
+            assert(vmUnforced.selectedIndex == nil, "CandidateViewModel default selectedIndex should be nil")
+
             // CandidateRow views
             var clickedIndex: Int?
             let row1 = CandidateRow(match: p1, isSelected: true, onClick: { clickedIndex = 0 })
@@ -27,6 +30,10 @@ public struct UITests {
             assert(clickedIndex == 0, "Row1 click action failed")
             row2.onClick()
             assert(clickedIndex == 1, "Row2 click action failed")
+
+            // Render CandidateListView view hierarchy with unforced selection
+            let unforcedListView = CandidateListView(viewModel: vmUnforced)
+            _ = unforcedListView.body
 
             // Render CandidateListView view hierarchy
             let listView = CandidateListView(viewModel: vm) { idx in
@@ -52,12 +59,12 @@ public struct UITests {
                 isFlippedLeft: false
             )
 
-            // Show panel
-            panel.show(matches: [p1], selectedIndex: 0, caretRect: caretRect)
+            // Show panel with nil selection (unforced initial state)
+            panel.show(matches: [p1], selectedIndex: nil, caretRect: caretRect)
             assert(panel.frame.width == AppConfig.popupWidth, "OverlayPanel width mismatch")
             assert(panel.frame.height > 0, "OverlayPanel height should be positive")
 
-            // Update content while visible
+            // Update content while visible with forced selection
             panel.show(matches: [p1, p2], selectedIndex: 1, caretRect: caretRect)
 
             // Dismiss panel
@@ -151,6 +158,15 @@ public struct UITests {
             assert(!vmWithMock.isLaunchAtStartupEnabled, "isLaunchAtStartupEnabled should be false after toggle")
             assert(!mockLaunch.isEnabled, "MockLaunchManager should have received false")
 
+            // 8. Suggestion popup timeout setting
+            AppConfig.resetPopupDelayToDefault()
+            let vmTimeout = AppViewModel(storage: storage)
+            assert(vmTimeout.popupDelayMs == 300.0, "Initial vm popupDelayMs should be 300.0")
+            vmTimeout.setPopupDelayMs(350.0)
+            assert(vmTimeout.popupDelayMs == 350.0, "vm popupDelayMs should be 350.0")
+            assert(AppConfig.popupDelayMs == 350.0, "AppConfig.popupDelayMs should sync to 350.0")
+            AppConfig.resetPopupDelayToDefault()
+
             // Clean up
             try? storage.removeStorageFile()
             try? FileManager.default.removeItem(at: tempDir)
@@ -219,15 +235,18 @@ public struct UITests {
             var imported = false
             var exported = false
             var startupToggled = false
+            var delayValue: Double = 400.0
             let actionMenu = ActionMenuButton(
                 onImport: { imported = true },
                 onExport: { exported = true },
-                isLaunchAtStartupEnabled: Binding(get: { startupToggled }, set: { startupToggled = $0 })
+                isLaunchAtStartupEnabled: Binding(get: { startupToggled }, set: { startupToggled = $0 }),
+                popupDelayMs: Binding(get: { delayValue }, set: { delayValue = $0 })
             )
             _ = actionMenu.body
             actionMenu.onImport()
             actionMenu.onExport()
             assert(imported && exported, "ActionMenuButton actions failed")
+            assert(delayValue == 400.0, "delayValue initial mismatch")
 
             // Clean up
             try? storage.removeStorageFile()

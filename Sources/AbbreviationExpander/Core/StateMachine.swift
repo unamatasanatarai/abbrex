@@ -22,11 +22,16 @@ public final class StateMachine {
     public private(set) var state: EngineState = .idle
     public private(set) var buffer: String = ""
     public private(set) var activeMatches: [ExpansionPayload] = []
-    public private(set) var selectedIndex: Int = 0
+    public private(set) var selectedIndex: Int? = nil
+
+    /// Indicates whether the user has explicitly forced focus via up/down navigation.
+    public var isSelectionForced: Bool {
+        return selectedIndex != nil
+    }
 
     public let trie: AbbreviationTrie
 
-    public var onStateChanged: ((EngineState, [ExpansionPayload], Int) -> Void)?
+    public var onStateChanged: ((EngineState, [ExpansionPayload], Int?) -> Void)?
 
     public init(trie: AbbreviationTrie = AbbreviationTrie()) {
         self.trie = trie
@@ -81,11 +86,20 @@ public final class StateMachine {
     public func navigateSelection(direction: NavigationDirection) {
         guard state == .popupActive, !activeMatches.isEmpty else { return }
 
-        switch direction {
-        case .up:
-            selectedIndex = (selectedIndex - 1 + activeMatches.count) % activeMatches.count
-        case .down:
-            selectedIndex = (selectedIndex + 1) % activeMatches.count
+        if let current = selectedIndex {
+            switch direction {
+            case .up:
+                selectedIndex = (current - 1 + activeMatches.count) % activeMatches.count
+            case .down:
+                selectedIndex = (current + 1) % activeMatches.count
+            }
+        } else {
+            switch direction {
+            case .up:
+                selectedIndex = activeMatches.count - 1
+            case .down:
+                selectedIndex = 0
+            }
         }
 
         notifyStateChange()
@@ -98,7 +112,15 @@ public final class StateMachine {
             return nil
         }
 
-        let targetIndex = index ?? selectedIndex
+        let targetIndex: Int
+        if let explicitIndex = index {
+            targetIndex = explicitIndex
+        } else if let selected = selectedIndex {
+            targetIndex = selected
+        } else {
+            return nil
+        }
+
         guard targetIndex >= 0 && targetIndex < activeMatches.count else { return nil }
 
         let selectedMatch = activeMatches[targetIndex]
@@ -119,26 +141,23 @@ public final class StateMachine {
 
     /// Resets buffer and sets target state.
     public func reset(state targetState: EngineState = .idle) {
-        if state == targetState && buffer.isEmpty && activeMatches.isEmpty {
+        if state == targetState && buffer.isEmpty && activeMatches.isEmpty && selectedIndex == nil {
             return
         }
         buffer = ""
         activeMatches = []
-        selectedIndex = 0
+        selectedIndex = nil
         state = targetState
         notifyStateChange()
     }
 
     private func updateMatchesAndState() {
         activeMatches = trie.searchPrefix(buffer)
+        selectedIndex = nil
         if !activeMatches.isEmpty {
             state = .popupActive
-            if selectedIndex >= activeMatches.count {
-                selectedIndex = 0
-            }
         } else {
             state = buffer.isEmpty ? .idle : .buffering
-            selectedIndex = 0
         }
         notifyStateChange()
     }

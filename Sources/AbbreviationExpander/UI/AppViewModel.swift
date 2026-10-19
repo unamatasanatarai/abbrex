@@ -12,6 +12,12 @@ public final class AppViewModel: ObservableObject {
             _ = launchAtLoginManager.setEnabled(isLaunchAtStartupEnabled)
         }
     }
+    @Published public var popupDelayMs: Double = AppConfig.popupDelayMs {
+        didSet {
+            guard !isInitializing, oldValue != popupDelayMs else { return }
+            AppConfig.popupDelayMs = popupDelayMs
+        }
+    }
 
     public let stateMachine: StateMachine
     public let overlayPanel = OverlayPanel()
@@ -35,6 +41,7 @@ public final class AppViewModel: ObservableObject {
         self.eventMonitor?.overlayPanel = self.overlayPanel
         self.libraryItems = Self.sortSnippets(storage.load())
         self.isLaunchAtStartupEnabled = launchAtLoginManager.isEnabled
+        self.popupDelayMs = AppConfig.popupDelayMs
 
         setupStateMachine()
         setupOverlayPanel()
@@ -109,7 +116,7 @@ public final class AppViewModel: ObservableObject {
         }
     }
 
-    private func scheduleOverlayShow(matches: [ExpansionPayload], selectedIndex: Int) {
+    private func scheduleOverlayShow(matches: [ExpansionPayload], selectedIndex: Int?) {
         showDebounceWorkItem?.cancel()
 
         // If overlay is ALREADY visible, update contents immediately
@@ -123,7 +130,7 @@ public final class AppViewModel: ObservableObject {
             return
         }
 
-        // If overlay is NOT yet visible, wait configured delay (e.g., 200ms) before showing popout
+        // If overlay is NOT yet visible, wait configured delay (e.g., 300ms) before showing popout
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             if self.stateMachine.state == .popupActive && !self.stateMachine.activeMatches.isEmpty {
@@ -137,7 +144,7 @@ public final class AppViewModel: ObservableObject {
         }
 
         self.showDebounceWorkItem = workItem
-        let delaySeconds = AppConfig.popupDelayMs / 1000.0
+        let delaySeconds = popupDelayMs / 1000.0
         DispatchQueue.main.asyncAfter(deadline: .now() + delaySeconds, execute: workItem)
     }
 
@@ -164,6 +171,11 @@ public final class AppViewModel: ObservableObject {
 
     public func toggleLaunchAtStartup() {
         setLaunchAtStartup(!isLaunchAtStartupEnabled)
+    }
+
+    public func setPopupDelayMs(_ delay: Double) {
+        guard popupDelayMs != delay else { return }
+        popupDelayMs = delay
     }
 
     public static func sortSnippets(_ items: [ExpansionPayload]) -> [ExpansionPayload] {
