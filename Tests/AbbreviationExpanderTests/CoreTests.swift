@@ -111,6 +111,16 @@ public struct CoreTests {
         }
 
         // MARK: - 4. Trie Tests
+        testRunner("Trie - Deterministic Candidate Order") {
+            // Candidate order decides what Tab expands, so it must not depend on Dictionary hash seeding
+            let trie = AbbreviationTrie()
+            for p in ["sigC", "sig3", "sigB", "sig1", "sig", "sigA", "sig2"] {
+                trie.insert(prefix: p, payload: ExpansionPayload(id: p, prefix: p, expansion: p))
+            }
+            let order = trie.searchPrefix("sig").map { $0.prefix }
+            assert(order == ["sig", "sig1", "sig2", "sig3", "sigA", "sigB", "sigC"], "Unexpected candidate order: \(order)")
+        }
+
         testRunner("Trie - Exhaustive Node & Tree Operations") {
             let trie = AbbreviationTrie()
 
@@ -360,6 +370,14 @@ public struct CoreTests {
             try "INVALID_JSON_CORRUPTED".data(using: .utf8)!.write(to: testFileURL)
             let fallbackItems = storage.load()
             assert(!fallbackItems.isEmpty, "Corrupted file should recover to default snippets")
+
+            // Corrupted file is preserved, so a subsequent save (e.g. on quit) cannot destroy the user's snippets
+            try storage.save(items: fallbackItems)
+            let backups = try FileManager.default.contentsOfDirectory(atPath: testFileURL.deletingLastPathComponent().path)
+                .filter { $0.hasPrefix("test_library.corrupt-") }
+            assert(backups.count == 1, "Expected exactly one preserved corrupt library file, found \(backups)")
+            let preserved = try String(contentsOf: testFileURL.deletingLastPathComponent().appendingPathComponent(backups[0]))
+            assert(preserved == "INVALID_JSON_CORRUPTED", "Preserved file must contain the original bytes")
 
             // Remove file
             try storage.removeStorageFile()

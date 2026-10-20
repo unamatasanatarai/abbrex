@@ -122,8 +122,10 @@ public final class CaretTracker {
 
         var rect = CGRect.zero
         guard AXValueGetValue(boundsVal as! AXValue, .cgRect, &rect), isPlausibleCaret(rect) else { return nil }
-        // A selection spans the whole range; anchor to its trailing edge where the caret sits
-        return CGRect(x: rect.maxX, y: rect.origin.y, width: 2, height: rect.height)
+        // A collapsed caret is (nearly) zero-width. Chromium/Electron return the whole field's bounds instead
+        // (e.g. 579x40 in Antigravity), which says nothing about where the caret is, so let the next fallback decide.
+        guard rect.width <= 4 else { return nil }
+        return CGRect(x: rect.minX, y: rect.origin.y, width: 2, height: rect.height)
     }
 
     private static func elementFrameAnchor(_ axElement: AXUIElement) -> CGRect? {

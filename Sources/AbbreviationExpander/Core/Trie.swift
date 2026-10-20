@@ -73,9 +73,11 @@ public final class AbbreviationTrie {
                 if results.count >= maxResults { return }
             }
         }
-        for childNode in node.children.values {
+        // Visit children in sorted order: Dictionary order is randomized per process, which would make
+        // candidate order (and therefore which candidate Tab expands) change between launches
+        for key in node.children.keys.sorted() {
             if results.count >= maxResults { return }
-            collectSubtree(childNode, results: &results, maxResults: maxResults)
+            collectSubtree(node.children[key]!, results: &results, maxResults: maxResults)
         }
     }
 

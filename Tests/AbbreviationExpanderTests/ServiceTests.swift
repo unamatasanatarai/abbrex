@@ -53,6 +53,15 @@ public struct ServiceTests {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
             assert(sm.state == .idle, "Mouse click outside should reset state to IDLE")
 
+            // Left click while BUFFERING (no matches) must also clear the buffer: the caret may now be in another field,
+            // and a stale buffer later turns into a match that deletes text the user never typed there.
+            sm.processCharacter("z")
+            sm.processCharacter("z")
+            assert(sm.state == .buffering, "State should be BUFFERING")
+            _ = monitor.handleCGEvent(dummyEvent, type: .leftMouseDown)
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+            assert(sm.state == .idle && sm.buffer.isEmpty, "Mouse click while buffering should clear the buffer")
+
             // 4. Modifier Flags Handling
             // Command key press resets state
             sm.processCharacter("b")
@@ -98,6 +107,17 @@ public struct ServiceTests {
             assert(replacedItems.count == 1, "Tab should trigger onReplace")
             assert(replacedItems[0].prefixLength == 3, "Prefix length should be 3")
             assert(replacedItems[0].text == "be right back", "Replacement text should match")
+
+            // Tab before the popup is on screen (still within the show delay) belongs to the app, not to AbbrEx
+            let hiddenPanel = OverlayPanel()
+            monitor.overlayPanel = hiddenPanel
+            sm.processCharacter("b")
+            sm.processCharacter("r")
+            assert(sm.state == .popupActive && !hiddenPanel.isVisible)
+            assert(!monitor.handleCGEvent(tabEvent, type: .keyDown), "Tab with hidden popup should pass through to the app")
+            assert(replacedItems.count == 1, "Tab with hidden popup must not expand")
+            assert(sm.state == .idle, "Tab with hidden popup should reset to IDLE")
+            monitor.overlayPanel = nil
 
             // Enter on non-active state returns false
             let enterEvent = CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: true)!

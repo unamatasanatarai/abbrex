@@ -133,7 +133,8 @@ public final class EventMonitor {
         }
 
         if type == .leftMouseDown {
-            if stateMachine.state == .popupActive {
+            // Any click may move the caret, so the typed buffer no longer describes the text before it
+            if stateMachine.state != .idle {
                 // Check if mouse click occurred inside the floating overlay panel frame
                 let cocoaMouseLocation = NSEvent.mouseLocation
                 if let panel = overlayPanel, panel.isVisible {
@@ -143,7 +144,7 @@ public final class EventMonitor {
                     }
                 }
 
-                // Mouse click outside overlay panel: dismiss popup state
+                // Mouse click outside overlay panel: reset buffer and dismiss popup state
                 DispatchQueue.main.async { [weak self] in
                     self?.stateMachine.reset(state: .idle)
                 }
@@ -185,7 +186,9 @@ public final class EventMonitor {
         let isEnter = (keyCode == 0x24 || keyCode == 0x4C)
 
         if isTab || isEnter {
-            if stateMachine.state == .popupActive {
+            // Tab only expands once the popup is on screen; before that it is the app's Tab (indent, accept completion, next field)
+            let isPopupShown = overlayPanel?.isVisible ?? true
+            if stateMachine.state == .popupActive && (isEnter || isPopupShown) {
                 if isEnter && !stateMachine.isSelectionForced {
                     // Enter key pressed WITHOUT prior arrow navigation: do NOT expand!
                     // Reset state and pass Enter key through to application

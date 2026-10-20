@@ -40,8 +40,24 @@ public final class LibraryStorage {
             let items = try Self.decoder.decode([ExpansionPayload].self, from: data)
             return items.sorted { $0.prefix.localizedCaseInsensitiveCompare($1.prefix) == .orderedAscending }
         } catch {
-            print("Warning: Failed to load library from \(fileURL.path): \(error). Falling back to defaults.")
+            // Move the unreadable file aside so the next save (e.g. on quit) cannot overwrite the user's snippets with defaults
+            let backupURL = preserveUnreadableFile()
+            print("Warning: Failed to load library from \(fileURL.path): \(error). Preserved original at \(backupURL?.path ?? "<failed>"). Falling back to defaults.")
             return AppConfig.defaultSnippets
+        }
+    }
+
+    /// Renames an unreadable library file to `library.corrupt-<timestamp>.json` next to the original.
+    @discardableResult
+    func preserveUnreadableFile() -> URL? {
+        let stamp = Int(Date().timeIntervalSince1970 * 1000)
+        let base = fileURL.deletingPathExtension().lastPathComponent
+        let backupURL = fileURL.deletingLastPathComponent().appendingPathComponent("\(base).corrupt-\(stamp).json")
+        do {
+            try fileManager.moveItem(at: fileURL, to: backupURL)
+            return backupURL
+        } catch {
+            return nil
         }
     }
 

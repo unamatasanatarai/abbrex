@@ -178,10 +178,8 @@ public final class TextReplacer {
 
         usleep(5000) // 5ms delay before posting Cmd+V
 
-        // 4. Post Command Key Down (0x37), V Key Down (0x09), V Key Up (0x09), Command Key Up (0x37)
-        if let cmdDown = CGEvent(keyboardEventSource: src, virtualKey: 0x37, keyDown: true) {
-            cmdDown.post(tap: .cgSessionEventTap)
-        }
+        // 4. Post V Key Down/Up (0x09) carrying the Command flag. No separate Command (0x37) events: a modifier
+        // posted as keyDown arrives as an unhandled key with no characters, which apps answer with the alert beep.
         if let vDown = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: true) {
             vDown.flags = .maskCommand
             vDown.post(tap: .cgSessionEventTap)
@@ -189,9 +187,6 @@ public final class TextReplacer {
         if let vUp = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: false) {
             vUp.flags = .maskCommand
             vUp.post(tap: .cgSessionEventTap)
-        }
-        if let cmdUp = CGEvent(keyboardEventSource: src, virtualKey: 0x37, keyDown: false) {
-            cmdUp.post(tap: .cgSessionEventTap)
         }
 
         // 5. Safely restore previous pasteboard content after delay without clobbering new user copies
