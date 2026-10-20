@@ -120,21 +120,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate,
         openItem.target = self
         menu.addItem(openItem)
 
-        let statusStartupItem = NSMenuItem(title: "Start on System Startup", action: #selector(toggleLaunchAtStartupAction), keyEquivalent: "")
-        statusStartupItem.target = self
-        statusStartupItem.state = (viewModel?.isLaunchAtStartupEnabled == true) ? .on : .off
-        menu.addItem(statusStartupItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        let importItem = NSMenuItem(title: "Import Snippets...", action: #selector(importSnippetsAction), keyEquivalent: "")
-        importItem.target = self
-        menu.addItem(importItem)
-
-        let exportItem = NSMenuItem(title: "Export Snippets...", action: #selector(exportSnippetsAction), keyEquivalent: "")
-        exportItem.target = self
-        menu.addItem(exportItem)
-
         menu.addItem(NSMenuItem.separator())
 
         let quitItem = NSMenuItem(title: "Quit", action: #selector(handleQuitMenuAction(_:)), keyEquivalent: "q")
@@ -158,15 +143,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate,
             statusItem?.button?.performClick(nil)
         } else {
             openPreferencesWindow()
-        }
-    }
-
-    public func menuWillOpen(_ menu: NSMenu) {
-        let isEnabled = (viewModel?.isLaunchAtStartupEnabled == true)
-        for item in menu.items {
-            if item.action == #selector(toggleLaunchAtStartupAction) {
-                item.state = isEnabled ? .on : .off
-            }
         }
     }
 

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help build run launch test revoke clean reset-cache install dmg release release-dry-run
+.PHONY: help kill build run launch test revoke clean reset-cache install dmg release release-dry-run
 
 ## help: Display this help message
 help:
@@ -8,17 +8,22 @@ help:
 	@echo "Targets:"
 	@awk '/^##/ { printf "  \033[36m%-20s\033[0m %s\n", substr($$2, 1, length($$2)-1), substr($$0, index($$0, $$3)) }' $(MAKEFILE_LIST)
 
+## kill: Quit all running AbbrEx instances
+kill:
+	@echo "==> Stopping running AbbrEx instances..."
+	@pkill -x AbbrEx 2>/dev/null || true
+
 ## build: Compile AbbrEx.app and sign binary
 build:
 	@./scripts/build.sh
 
 ## run: Launch compiled AbbrEx.app
-run: build
+run: kill build
 	@echo "==> Launching AbbrEx.app..."
 	@open "build/AbbrEx.app"
 
 ## launch: Open AbbrEx.app without rebuilding (preserves TCC CDHash)
-launch:
+launch: kill
 	@echo "==> Launching AbbrEx.app (no rebuild)..."
 	@open "build/AbbrEx.app"
 

@@ -250,6 +250,14 @@ public struct CoreTests {
             sm.loadItems([p1, p2])
             assert(sm.state == .idle, "State should be IDLE after loadItems")
 
+            // Empty expansions are not suggested; whitespace-only expansions are
+            let emptyItem = ExpansionPayload(id: "e", prefix: "bre", expansion: "")
+            let spaceItem = ExpansionPayload(id: "s", prefix: "brs", expansion: " ")
+            sm.loadItems([p1, p2, emptyItem, spaceItem])
+            assert(sm.trie.searchPrefix("bre").isEmpty, "Snippet with empty expansion should not be suggested")
+            assert(sm.trie.searchPrefix("brs").map(\.id) == ["s"], "Snippet with whitespace expansion should be suggested")
+            sm.loadItems([p1, p2])
+
             // Printable character typing
             sm.processCharacter("b")
             assert(sm.state == .popupActive, "State should be POPUP_ACTIVE")

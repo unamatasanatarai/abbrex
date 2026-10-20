@@ -17,6 +17,8 @@ public struct AppLifecycleTests {
 
             delegate.setupStatusMenu()
             assert(delegate.statusItem != nil, "statusItem should be initialized")
+            assert(delegate.statusMenu?.items.map(\.title) == ["Open AbbrEx", "", "Quit"], "Status menu should contain only Open AbbrEx, a separator and Quit")
+            assert(delegate.statusMenu?.items[1].isSeparatorItem == true, "Status menu should separate Open AbbrEx and Quit")
 
             // Status bar icon
             let icon = delegate.getStatusBarIcon()
@@ -39,10 +41,10 @@ public struct AppLifecycleTests {
             assert(delegate.preferencesWindow?.title == "AbbrEx", "Preferences window title mismatch")
 
             // Test Launch at Startup menu items & actions
-            let startupMenuItem = delegate.statusMenu?.items.first(where: {
+            let startupMenuItem = NSApp.mainMenu?.items.first?.submenu?.items.first(where: {
                 $0.action == #selector(delegate.toggleLaunchAtStartupAction)
             })
-            assert(startupMenuItem != nil, "Status menu should contain Start on System Startup item")
+            assert(startupMenuItem != nil, "App menu should contain Start on System Startup item")
             assert(startupMenuItem?.title == "Start on System Startup", "Menu title should match")
 
             // Test toggling via action
@@ -50,10 +52,7 @@ public struct AppLifecycleTests {
             delegate.toggleLaunchAtStartupAction()
             assert(vm.isLaunchAtStartupEnabled == !initialStartup, "toggleLaunchAtStartupAction should toggle VM state")
 
-            // Test menuWillOpen and validateMenuItem synchronization
-            delegate.menuWillOpen(delegate.statusMenu ?? NSMenu())
-            assert(startupMenuItem?.state == (vm.isLaunchAtStartupEnabled ? .on : .off), "menu item state should reflect VM state")
-
+            // Test validateMenuItem synchronization
             if let item = startupMenuItem {
                 assert(delegate.validateMenuItem(item), "validateMenuItem should return true for startup item")
                 assert(item.state == (vm.isLaunchAtStartupEnabled ? .on : .off), "validateMenuItem should update item state")

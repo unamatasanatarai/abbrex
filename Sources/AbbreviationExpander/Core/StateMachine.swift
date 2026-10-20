@@ -38,9 +38,10 @@ public final class StateMachine {
     }
 
     /// Loads items into the internal Trie structure.
+    /// Items with an empty expansion are skipped; whitespace-only expansions are kept.
     public func loadItems(_ items: [ExpansionPayload]) {
         trie.clear()
-        for item in items {
+        for item in items where !item.expansion.isEmpty {
             trie.insert(prefix: item.prefix, payload: item)
         }
         reset()

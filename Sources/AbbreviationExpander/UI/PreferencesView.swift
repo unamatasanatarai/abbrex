@@ -896,7 +896,7 @@ struct MacTextEditor: NSViewRepresentable {
 
         let contentSize = scrollView.contentSize
         let textStorage = NSTextStorage()
-        let layoutManager = NSLayoutManager()
+        let layoutManager = WhitespaceMarkerLayoutManager()
         textStorage.addLayoutManager(layoutManager)
 
         let textContainer = NSTextContainer(size: NSSize(width: contentSize.width, height: CGFloat.greatestFiniteMagnitude))
@@ -969,6 +969,8 @@ struct MacTextEditor: NSViewRepresentable {
             if parent.text != currentString {
                 parent.text = currentString
             }
+            // Edits can change markers on other lines (e.g. a trailing newline stops being trailing)
+            textView.needsDisplay = true
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -979,6 +981,83 @@ struct MacTextEditor: NSViewRepresentable {
                 }
             }
             return false
+        }
+    }
+}
+
+// MARK: - Whitespace Markers (only for likely typos: trailing spaces, tabs, trailing newlines)
+enum WhitespaceMarker: Equatable {
+    case trailingSpace
+    case tab
+    case trailingNewline
+
+    var symbol: String {
+        switch self {
+        case .trailingSpace: return "·"
+        case .tab: return "→"
+        case .trailingNewline: return "↵"
+        }
+    }
+
+    /// Returns UTF-16 offsets of characters that should display a marker.
+    static func markers(in string: String) -> [(location: Int, marker: WhitespaceMarker)] {
+        let chars = Array(string.utf16)
+        let space: UInt16 = 0x20, tab: UInt16 = 0x09, newline: UInt16 = 0x0A, carriageReturn: UInt16 = 0x0D
+        var result: [(location: Int, marker: WhitespaceMarker)] = []
+
+        // Spaces and tabs at the end of each line
+        var index = chars.count - 1
+        var inTrailingRun = true
+        while index >= 0 {
+            let c = chars[index]
+            if c == newline || c == carriageReturn {
+                inTrailingRun = true
+            } else if inTrailingRun && c == space {
+                result.append((index, .trailingSpace))
+            } else if c != tab {
+                inTrailingRun = false
+            }
+            index -= 1
+        }
+
+        // Tabs anywhere
+        for (i, c) in chars.enumerated() where c == tab {
+            result.append((i, .tab))
+        }
+
+        // Newlines in the whitespace run at the very end of the snippet
+        index = chars.count - 1
+        while index >= 0, [space, tab, newline, carriageReturn].contains(chars[index]) {
+            if chars[index] == newline {
+                result.append((index, .trailingNewline))
+            }
+            index -= 1
+        }
+
+        return result.sorted { $0.location < $1.location }
+    }
+}
+
+final class WhitespaceMarkerLayoutManager: NSLayoutManager {
+    override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+        guard let textStorage = textStorage else { return }
+
+        let charRange = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        let font = (textStorage.length > 0 ? textStorage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont : nil)
+            ?? .monospacedSystemFont(ofSize: 13, weight: .regular)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.tertiaryLabelColor
+        ]
+
+        for (location, marker) in WhitespaceMarker.markers(in: textStorage.string)
+            where NSLocationInRange(location, charRange) {
+            let glyphIndex = glyphIndexForCharacter(at: location)
+            let lineRect = lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+            let glyphLocation = self.location(forGlyphAt: glyphIndex)
+            let point = NSPoint(x: origin.x + lineRect.minX + glyphLocation.x, y: origin.y + lineRect.minY)
+            NSAttributedString(string: marker.symbol, attributes: attributes).draw(at: point)
         }
     }
 }

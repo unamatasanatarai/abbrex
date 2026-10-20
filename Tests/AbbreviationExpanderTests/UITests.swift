@@ -253,6 +253,32 @@ public struct UITests {
             try? FileManager.default.removeItem(at: tempDir)
         }
 
+        testRunner("WhitespaceMarker - Trailing Spaces, Tabs & Trailing Newlines") {
+            func marked(_ s: String) -> [String] {
+                WhitespaceMarker.markers(in: s).map { "\($0.location)\($0.marker.symbol)" }
+            }
+            assert(marked("hello world").isEmpty, "Inner spaces should not be marked")
+            assert(marked("a\nb").isEmpty, "Inner newlines should not be marked")
+            assert(marked("hi  ") == ["2·", "3·"], "Trailing spaces should be marked")
+            assert(marked("a \nb") == ["1·"], "Trailing spaces on inner lines should be marked")
+            assert(marked("a\tb") == ["1→"], "Tabs should be marked")
+            assert(marked("a \t") == ["1·", "2→"], "Spaces before a trailing tab should be marked")
+            assert(marked("a\n") == ["1↵"], "Trailing newline should be marked")
+            assert(marked("a\n \n") == ["1↵", "2·", "3↵"], "All newlines in trailing whitespace should be marked")
+            assert(marked("").isEmpty, "Empty string has no markers")
+
+            let lm = WhitespaceMarkerLayoutManager()
+            let storage = NSTextStorage(string: "a \tb\n")
+            storage.addLayoutManager(lm)
+            let container = NSTextContainer(size: NSSize(width: 200, height: 200))
+            lm.addTextContainer(container)
+            let image = NSImage(size: NSSize(width: 200, height: 50), flipped: true) { _ in
+                lm.drawGlyphs(forGlyphRange: lm.glyphRange(for: container), at: .zero)
+                return true
+            }
+            _ = image.tiffRepresentation
+        }
+
         // MARK: - 5. Custom AppKit Controls Tests (MacSingleLineTextField, MacTextEditor)
         testRunner("Custom AppKit Controls - MacSingleLineTextField & MacTextEditor") {
             // MacSingleLineTextField
