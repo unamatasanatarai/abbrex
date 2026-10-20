@@ -19,7 +19,7 @@ IFS= read -r sdk_path <"$sdk_file"
 rm -f "$sdk_file"
 
 app_name="AbbrEx"
-bundle_id="com.citizen.AbbreviationExpander"
+bundle_id="com.unamatasanatarai.abbrex"
 
 version=""
 if [[ -f "VERSION" ]]; then

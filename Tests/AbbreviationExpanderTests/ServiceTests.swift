@@ -254,7 +254,7 @@ public struct ServiceTests {
             let tempDir = FileManager.default.temporaryDirectory
                 .appendingPathComponent("AbbrExLaunchTests_\(UUID().uuidString)", isDirectory: true)
 
-            let testBundleId = "com.citizen.AbbreviationExpander.test"
+            let testBundleId = "com.unamatasanatarai.abbrex.test"
             let expectedAppPath = "/Applications/AbbrExTest.app"
 
             let manager = LaunchAtLoginManager(

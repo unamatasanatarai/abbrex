@@ -26,10 +26,10 @@ launch:
 test:
 	@./scripts/test.sh
 
-## revoke: Reset macOS Accessibility TCC permissions for com.citizen.AbbreviationExpander
+## revoke: Reset macOS Accessibility TCC permissions for com.unamatasanatarai.abbrex
 revoke:
 	@echo "==> Resetting TCC permissions..."
-	@tccutil reset Accessibility com.citizen.AbbreviationExpander 2>/dev/null || true
+	@tccutil reset Accessibility com.unamatasanatarai.abbrex 2>/dev/null || true
 	@echo "✅ All permissions revoked."
 
 ## reset-cache: Clear macOS LaunchServices and IconServices caches

@@ -1024,5 +1024,5 @@ final class MacNSTextView: NSTextView {
 }
 
 extension Notification.Name {
-    static let focusSearchField = Notification.Name("com.citizen.AbbreviationExpander.focusSearchField")
+    static let focusSearchField = Notification.Name("com.unamatasanatarai.abbrex.focusSearchField")
 }

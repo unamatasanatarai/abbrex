@@ -39,7 +39,7 @@ public struct AppConfig {
     // MARK: - Application Metadata
 
     public static let appName: String = "AbbrEx"
-    public static let bundleIdentifier: String = "com.citizen.AbbreviationExpander"
+    public static let bundleIdentifier: String = "com.unamatasanatarai.abbrex"
     public static var version: String {
         // 1. Bundle info dictionary (when running inside compiled .app bundle)
         if let bundleVer = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !bundleVer.isEmpty {

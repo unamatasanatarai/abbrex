@@ -14,7 +14,7 @@ public protocol LaunchAtLoginManaging: AnyObject {
 /// On macOS 13+, attempts modern `SMAppService.mainApp` registration.
 /// When running on macOS 12, or in environments where `SMAppService` is unavailable
 /// or restricted (e.g. ad-hoc signed or development builds), seamlessly falls back
-/// to managing a standard user LaunchAgent plist (`~/Library/LaunchAgents/com.citizen.AbbreviationExpander.plist`).
+/// to managing a standard user LaunchAgent plist (`~/Library/LaunchAgents/com.unamatasanatarai.abbrex.plist`).
 public final class LaunchAtLoginManager: LaunchAtLoginManaging {
     public static let shared = LaunchAtLoginManager()
 
