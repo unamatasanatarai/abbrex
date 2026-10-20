@@ -92,7 +92,9 @@ public struct CandidateRow: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
-            .frame(height: 25)
+            .frame(maxWidth: .infinity, minHeight: 25, maxHeight: 25)
+            // Plain buttons only hit-test opaque content; make the whole row (incl. Spacer) clickable
+            .contentShape(Rectangle())
             .background(
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
                     .fill(rowBackgroundColor)

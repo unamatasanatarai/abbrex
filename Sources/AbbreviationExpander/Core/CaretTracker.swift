@@ -42,12 +42,18 @@ public final class CaretTracker {
     ///   - popupHeight: Height of the overlay popup to perform boundary detection.
     /// - Returns: Calculated CaretRect with target top-left point and flip flags.
     public static func getCaretScreenPosition(popupWidth: CGFloat = 240, popupHeight: CGFloat = 150) -> CaretRect {
-        if let element = focusedElement() {
-            // 1. Text range bounds (native Cocoa text views and most apps)
-            // 2. Text marker bounds (Safari, Chrome, Electron and other web content)
-            // 3. Element frame (caret position not exposed at all)
-            if let rect = caretRectFromTextRange(element) ?? caretRectFromTextMarkers(element) ?? elementFrameAnchor(element) {
-                return computePosition(for: rect, popupWidth: popupWidth, popupHeight: popupHeight)
+        if let rect = focusedCaretRect() {
+            return computePosition(for: rect, popupWidth: popupWidth, popupHeight: popupHeight)
+        }
+
+        // Chromium and Electron only build their accessibility tree once a client asks for it. The tree is
+        // populated asynchronously, so after turning it on give the app a moment and look again.
+        if let app = NSWorkspace.shared.frontmostApplication, enableAccessibility(for: app) {
+            for _ in 0..<5 {
+                usleep(30_000)
+                if let rect = focusedCaretRect() {
+                    return computePosition(for: rect, popupWidth: popupWidth, popupHeight: popupHeight)
+                }
             }
         }
 
@@ -57,6 +63,134 @@ public final class CaretTracker {
         // Convert screen flipped coordinates
         let cgMousePoint = CGPoint(x: mouseLocation.x, y: primaryScreenHeight - mouseLocation.y)
         return computePosition(for: CGRect(origin: cgMousePoint, size: CGSize(width: 1, height: 20)), popupWidth: popupWidth, popupHeight: popupHeight)
+    }
+
+    /// PIDs for which switching on the accessibility tree has been attempted, so it is attempted once per process.
+    private static var accessibilityAttemptedPIDs = Set<pid_t>()
+    /// PIDs whose accessibility tree was switched on by us. Their AX text writes report success without
+    /// changing the visible text, so TextReplacer must type into them instead.
+    private static var accessibilityEnabledPIDs = Set<pid_t>()
+
+    public static func didEnableAccessibility(for pid: pid_t) -> Bool {
+        // The tree may already be on from a previous AbbrEx run; switching it on again is harmless and tells us
+        if !accessibilityAttemptedPIDs.contains(pid), let app = NSRunningApplication(processIdentifier: pid) {
+            enableAccessibility(for: app)
+        }
+        return accessibilityEnabledPIDs.contains(pid)
+    }
+
+    /// Asks Electron (`AXManualAccessibility`) or Chromium (`AXEnhancedUserInterface`) apps to expose their
+    /// accessibility tree, which they otherwise keep off unless VoiceOver is running.
+    /// - Returns: `true` if the tree was switched on by this call.
+    @discardableResult
+    public static func enableAccessibility(for app: NSRunningApplication) -> Bool {
+        let pid = app.processIdentifier
+        guard pid != ProcessInfo.processInfo.processIdentifier,
+              !accessibilityAttemptedPIDs.contains(pid) else { return false }
+        accessibilityAttemptedPIDs.insert(pid)
+
+        let appElement = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(appElement, 0.25)
+        var enabled = AXUIElementSetAttributeValue(appElement, "AXManualAccessibility" as CFString, kCFBooleanTrue) == .success
+        // AXEnhancedUserInterface interferes with window animations, so only use it where the app needs it
+        if !enabled && isChromiumBased(app) {
+            enabled = AXUIElementSetAttributeValue(appElement, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue) == .success
+        }
+        if enabled {
+            accessibilityEnabledPIDs.insert(pid)
+        }
+        return enabled
+    }
+
+    private static func isChromiumBased(_ app: NSRunningApplication) -> Bool {
+        guard let bundleURL = app.bundleURL else { return false }
+        let frameworks = bundleURL.appendingPathComponent("Contents/Frameworks")
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: frameworks.path)) ?? []
+        return names.contains { $0.hasSuffix("Framework.framework") && ($0.contains("Chrome") || $0.contains("Chromium") || $0.contains("Electron") || $0.contains("Edge") || $0.contains("Brave")) }
+    }
+
+    private static func focusedCaretRect() -> CGRect? {
+        guard let element = focusedElement() else { return nil }
+        // 1. Google Docs caret element (typing goes to an offscreen proxy field)
+        // 2. Text range bounds (native Cocoa text views and most apps)
+        // 3. Text marker bounds (Safari, Chrome, Electron and other web content)
+        // 4. Element frame (caret position not exposed at all)
+        return caretRectFromGoogleDocs(element)
+            ?? caretRectFromTextRange(element)
+            ?? caretRectFromTextMarkers(element)
+            ?? elementFrameAnchor(element)
+    }
+
+    /// Google Docs renders text on a canvas and routes keystrokes into a 1pt-tall `docs-texteventtarget-iframe`
+    /// parked offscreen, so its text bounds are meaningless. The visible caret is a `kix-cursor-caret` element.
+    private static func caretRectFromGoogleDocs(_ axElement: AXUIElement) -> CGRect? {
+        var current = axElement
+        var proxyFrame: AXUIElement?
+        for _ in 0..<4 {
+            guard let parent = copyElement(current, kAXParentAttribute) else { return nil }
+            if domClasses(parent).contains("docs-texteventtarget-iframe") {
+                proxyFrame = parent
+                break
+            }
+            current = parent
+        }
+        guard let proxy = proxyFrame, let editor = copyElement(proxy, kAXParentAttribute) else { return nil }
+
+        // Breadth-first: the caret sits ~15 levels below the editor container in a few hundred nodes
+        var queue: [AXUIElement] = [editor]
+        var carets: [(rect: CGRect, isBlinking: Bool)] = []
+        var visited = 0
+        while !queue.isEmpty && visited < 3000 {
+            let node = queue.removeFirst()
+            visited += 1
+            if CFEqual(node, proxy) { continue }
+
+            let classes = domClasses(node)
+            if classes.contains("kix-cursor"), let caret = elementFrame(node), isPlausibleCaret(caret) {
+                // Collaborators' cursors share the class; only the local one blinks
+                carets.append((caret, classes.contains("docs-text-ui-cursor-blink")))
+                continue
+            }
+            queue.append(contentsOf: copyChildren(node))
+        }
+
+        guard let caret = carets.first(where: { $0.isBlinking })?.rect ?? (carets.count == 1 ? carets[0].rect : nil) else {
+            return nil
+        }
+        return CGRect(x: caret.minX, y: caret.minY, width: 2, height: caret.height)
+    }
+
+    private static func copyElement(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let ref = value, CFGetTypeID(ref) == AXUIElementGetTypeID() else { return nil }
+        return (ref as! AXUIElement)
+    }
+
+    private static func copyChildren(_ element: AXUIElement) -> [AXUIElement] {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &value) == .success else { return [] }
+        return (value as? [AXUIElement]) ?? []
+    }
+
+    private static func domClasses(_ element: AXUIElement) -> [String] {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, "AXDOMClassList" as CFString, &value) == .success else { return [] }
+        return (value as? [String]) ?? []
+    }
+
+    private static func elementFrame(_ element: AXUIElement) -> CGRect? {
+        var positionVal: CFTypeRef?
+        var sizeVal: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionVal) == .success,
+              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeVal) == .success,
+              let pos = positionVal, let sz = sizeVal else { return nil }
+
+        var point = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(pos as! AXValue, .cgPoint, &point),
+              AXValueGetValue(sz as! AXValue, .cgSize, &size) else { return nil }
+        return CGRect(origin: point, size: size)
     }
 
     /// Resolves the focused UI element, preferring the frontmost application over the system-wide element.
@@ -121,28 +255,52 @@ public final class CaretTracker {
               let boundsVal = boundsValue else { return nil }
 
         var rect = CGRect.zero
-        guard AXValueGetValue(boundsVal as! AXValue, .cgRect, &rect), isPlausibleCaret(rect) else { return nil }
-        // A collapsed caret is (nearly) zero-width. Chromium/Electron return the whole field's bounds instead
-        // (e.g. 579x40 in Antigravity), which says nothing about where the caret is, so let the next fallback decide.
-        guard rect.width <= 4 else { return nil }
-        return CGRect(x: rect.minX, y: rect.origin.y, width: 2, height: rect.height)
+        if AXValueGetValue(boundsVal as! AXValue, .cgRect, &rect), isPlausibleCaret(rect), rect.width <= 4 {
+            return CGRect(x: rect.minX, y: rect.origin.y, width: 2, height: rect.height)
+        }
+
+        // A collapsed caret should be (nearly) zero-width. Chromium/Electron return the whole field's bounds instead
+        // (e.g. 579x40 in Antigravity), so measure the character next to the caret and anchor to its edge.
+        guard CFGetTypeID(markers) == AXTextMarkerRangeGetTypeID() else { return nil }
+        let caretMarker = AXTextMarkerRangeCopyEndMarker(markers as! AXTextMarkerRange)
+
+        if let prev = adjacentMarker(axElement, "AXPreviousTextMarkerForTextMarker", caretMarker),
+           let charRect = boundsForMarkers(axElement, from: prev, to: caretMarker) {
+            return CGRect(x: charRect.maxX, y: charRect.origin.y, width: 2, height: charRect.height)
+        }
+        if let next = adjacentMarker(axElement, "AXNextTextMarkerForTextMarker", caretMarker),
+           let charRect = boundsForMarkers(axElement, from: caretMarker, to: next) {
+            return CGRect(x: charRect.minX, y: charRect.origin.y, width: 2, height: charRect.height)
+        }
+        return nil
+    }
+
+    private static func adjacentMarker(_ axElement: AXUIElement, _ attribute: String, _ marker: AXTextMarker) -> AXTextMarker? {
+        var result: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(axElement, attribute as CFString, marker, &result) == .success,
+              let value = result, CFGetTypeID(value) == AXTextMarkerGetTypeID() else { return nil }
+        return (value as! AXTextMarker)
+    }
+
+    /// Bounds of a single-character marker range, rejecting the whole-field rects some apps return.
+    private static func boundsForMarkers(_ axElement: AXUIElement, from start: AXTextMarker, to end: AXTextMarker) -> CGRect? {
+        let range = AXTextMarkerRangeCreate(kCFAllocatorDefault, start, end)
+        var boundsValue: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(axElement, "AXBoundsForTextMarkerRange" as CFString, range, &boundsValue) == .success,
+              let boundsVal = boundsValue else { return nil }
+
+        var rect = CGRect.zero
+        // A newline yields a zero-width rect at line end, which is still a valid caret anchor
+        guard AXValueGetValue(boundsVal as! AXValue, .cgRect, &rect), isPlausibleCaret(rect), rect.width < 80 else { return nil }
+        return rect
     }
 
     private static func elementFrameAnchor(_ axElement: AXUIElement) -> CGRect? {
-        var positionVal: CFTypeRef?
-        var sizeVal: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(axElement, kAXPositionAttribute as CFString, &positionVal) == .success,
-              AXUIElementCopyAttributeValue(axElement, kAXSizeAttribute as CFString, &sizeVal) == .success,
-              let pos = positionVal, let sz = sizeVal else { return nil }
-
-        var point = CGPoint.zero
-        var size = CGSize.zero
-        AXValueGetValue(pos as! AXValue, .cgPoint, &point)
-        AXValueGetValue(sz as! AXValue, .cgSize, &size)
-        guard size.height > 0, isOnAnyScreen(point) else { return nil }
+        // A few-points-tall element is a hidden input proxy, not a visible control worth anchoring to
+        guard let frame = elementFrame(axElement), frame.height >= 4, isOnAnyScreen(frame.origin) else { return nil }
 
         // Anchor caret near current input control content area
-        return CGRect(x: point.x + 8, y: point.y + 4, width: 2, height: min(size.height, 22))
+        return CGRect(x: frame.minX + 8, y: frame.minY + 4, width: 2, height: min(frame.height, 22))
     }
 
     /// Rejects the zero/garbage rects some apps return instead of failing (a caret may legitimately be 0pt wide).

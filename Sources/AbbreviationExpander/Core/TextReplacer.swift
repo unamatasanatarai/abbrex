@@ -94,6 +94,13 @@ public final class TextReplacer {
 
         let axElement = focusedElement as! AXUIElement
 
+        // Chromium/Electron accept AX text writes once CaretTracker switches their tree on, but don't apply them
+        // to the page (Google Docs even routes them into an offscreen proxy field), so type into those instead
+        var pid: pid_t = 0
+        if AXUIElementGetPid(axElement, &pid) == .success, CaretTracker.didEnableAccessibility(for: pid) {
+            return false
+        }
+
         // 1. Get current text range / selection
         var selectedRangeVal: CFTypeRef?
         guard AXUIElementCopyAttributeValue(axElement, kAXSelectedTextRangeAttribute as CFString, &selectedRangeVal) == .success,
