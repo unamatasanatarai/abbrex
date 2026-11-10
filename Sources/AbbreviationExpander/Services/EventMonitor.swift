@@ -181,13 +181,17 @@ public final class EventMonitor {
             return false
         }
 
+        // Popup keys (Tab, arrows, Ctrl+j/k/n/p/l) only belong to AbbrEx once the popup is actually
+        // visible on screen; before that (within the show delay) they are the app's keys
+        // (indent, move caret, Emacs bindings). Enter is gated transitively: it only expands
+        // after arrow navigation, which itself requires a visible popup.
+        let isPopupShown = overlayPanel?.isVisible ?? false
+
         // 4. Accept Expansion with Tab (0x30) or Return/Enter (0x24 / 0x4C)
         let isTab = (keyCode == 0x30)
         let isEnter = (keyCode == 0x24 || keyCode == 0x4C)
 
         if isTab || isEnter {
-            // Tab only expands once the popup is on screen; before that it is the app's Tab (indent, accept completion, next field)
-            let isPopupShown = overlayPanel?.isVisible ?? true
             if stateMachine.state == .popupActive && (isEnter || isPopupShown) {
                 if isEnter && !stateMachine.isSelectionForced {
                     // Enter key pressed WITHOUT prior arrow navigation: do NOT expand!
@@ -212,7 +216,7 @@ public final class EventMonitor {
 
         // 5. Arrow Keys Navigation (Up: 0x7E, Down: 0x7D, Left: 0x7B, Right: 0x7C)
         if keyCode == 0x7E || keyCode == 0x7D {
-            if stateMachine.state == .popupActive {
+            if stateMachine.state == .popupActive && isPopupShown {
                 let dir: NavigationDirection = (keyCode == 0x7E) ? .up : .down
                 stateMachine.navigateSelection(direction: dir)
                 return true
@@ -249,7 +253,7 @@ public final class EventMonitor {
 
         // 8. Control Shortcuts when popup active: Ctrl+j, Ctrl+k, Ctrl+n, Ctrl+p, Ctrl+l
         if isControlPressed {
-            if stateMachine.state == .popupActive {
+            if stateMachine.state == .popupActive && isPopupShown {
                 // Keycodes: j = 0x26, k = 0x28, n = 0x2D, p = 0x23, l = 0x25
                 if keyCode == 0x26 || keyCode == 0x2D { // j or n -> Down
                     stateMachine.navigateSelection(direction: .down)

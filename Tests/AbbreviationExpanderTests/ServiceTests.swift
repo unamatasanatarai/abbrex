@@ -94,6 +94,10 @@ public struct ServiceTests {
             assert(sm.state == .idle, "Backspace should empty buffer and reset to IDLE")
 
             // 7. KeyCode: Tab (0x30) & Enter (0x24) Expansion Commit
+            let activePanel = OverlayPanel()
+            activePanel.orderFront(nil)
+            monitor.overlayPanel = activePanel
+
             sm.reset(state: .idle)
             sm.processCharacter("b")
             sm.processCharacter("r")
@@ -102,22 +106,68 @@ public struct ServiceTests {
             let tabEvent = CGEvent(keyboardEventSource: nil, virtualKey: 0x30, keyDown: true)!
             tabEvent.flags = []
             let tabConsumed = monitor.handleCGEvent(tabEvent, type: .keyDown)
-            assert(tabConsumed, "Tab on active popup should consume event (return true)")
+            assert(tabConsumed, "Tab on active visible popup should consume event (return true)")
             assert(sm.state == .idle, "State should be IDLE after expansion")
             assert(replacedItems.count == 1, "Tab should trigger onReplace")
             assert(replacedItems[0].prefixLength == 3, "Prefix length should be 3")
             assert(replacedItems[0].text == "be right back", "Replacement text should match")
 
             // Tab before the popup is on screen (still within the show delay) belongs to the app, not to AbbrEx
-            let hiddenPanel = OverlayPanel()
-            monitor.overlayPanel = hiddenPanel
+            activePanel.orderOut(nil)
             sm.processCharacter("b")
             sm.processCharacter("r")
-            assert(sm.state == .popupActive && !hiddenPanel.isVisible)
+            assert(sm.state == .popupActive && !activePanel.isVisible)
             assert(!monitor.handleCGEvent(tabEvent, type: .keyDown), "Tab with hidden popup should pass through to the app")
             assert(replacedItems.count == 1, "Tab with hidden popup must not expand")
             assert(sm.state == .idle, "Tab with hidden popup should reset to IDLE")
+
+            // No panel at all: popup can never be on screen, so Tab belongs to the app
             monitor.overlayPanel = nil
+            sm.processCharacter("b")
+            sm.processCharacter("r")
+            assert(sm.state == .popupActive)
+            assert(!monitor.handleCGEvent(tabEvent, type: .keyDown), "Tab with no overlay panel should pass through to the app")
+            assert(replacedItems.count == 1, "Tab with no overlay panel must not expand")
+            monitor.overlayPanel = activePanel
+
+            // Navigation keys before the popup is on screen belong to the app (move caret, Emacs bindings),
+            // and must not arm a forced selection that a following Enter would silently expand
+            assert(!activePanel.isVisible)
+            let hiddenNavKeys: [(CGKeyCode, CGEventFlags, String)] = [
+                (0x7D, [], "Down"), (0x7E, [], "Up"),
+                (0x26, .maskControl, "Ctrl+j"), (0x28, .maskControl, "Ctrl+k"),
+                (0x2D, .maskControl, "Ctrl+n"), (0x23, .maskControl, "Ctrl+p"),
+                (0x25, .maskControl, "Ctrl+l"),
+            ]
+            for (key, flags, name) in hiddenNavKeys {
+                sm.reset(state: .idle)
+                sm.processCharacter("b")
+                sm.processCharacter("r")
+                sm.processCharacter("b")
+                assert(sm.state == .popupActive)
+                let ev = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: true)!
+                ev.flags = flags
+                assert(!monitor.handleCGEvent(ev, type: .keyDown), "\(name) with hidden popup should pass through to the app")
+                assert(!sm.isSelectionForced, "\(name) with hidden popup must not force a selection")
+                assert(sm.state == .idle, "\(name) with hidden popup should reset to IDLE")
+                assert(replacedItems.count == 1, "\(name) with hidden popup must not expand")
+            }
+
+            // Down then Enter within the show delay: Enter must reach the app, nothing expands
+            sm.reset(state: .idle)
+            sm.processCharacter("b")
+            sm.processCharacter("r")
+            sm.processCharacter("b")
+            let hiddenDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x7D, keyDown: true)!
+            hiddenDown.flags = []
+            let hiddenEnter = CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: true)!
+            hiddenEnter.flags = []
+            assert(!monitor.handleCGEvent(hiddenDown, type: .keyDown), "Down with hidden popup should pass through")
+            assert(!monitor.handleCGEvent(hiddenEnter, type: .keyDown), "Enter after hidden Down should pass through")
+            assert(replacedItems.count == 1, "Down+Enter with hidden popup must not expand")
+
+            // Remaining popup-key tests run against a visible popup
+            activePanel.orderFront(nil)
 
             // Enter on non-active state returns false
             let enterEvent = CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: true)!
@@ -232,6 +282,7 @@ public struct ServiceTests {
             let otherCtrl = CGEvent(keyboardEventSource: nil, virtualKey: 0x00, keyDown: true)!
             otherCtrl.flags = .maskControl
             assert(!monitor.handleCGEvent(otherCtrl, type: .keyDown), "Other Ctrl key should return false")
+            activePanel.orderOut(nil)
 
             // 12. handleNSEvent fallback
             if let nsEvent = NSEvent.keyEvent(
